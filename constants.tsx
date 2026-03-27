@@ -417,6 +417,20 @@ export const INSTRUCTORS: Instructor[] = [
 
 export const PRICING_TIERS_INR: PricingTier[] = [
   {
+    name: 'Trial Pack: The Seven-Day Flow',
+    price: '₹29',
+    frequency: 'one-time',
+    features: [
+      'Duration: 7 days (fixed window)',
+      'Start date: April 4, 2026',
+      '4 sessions total (Sat + Sun, Tue + Wed)',
+      'Access only to those 4 live/recorded sessions',
+      'Limited-time trial access — one purchase per user',
+    ],
+    isRecommended: false,
+    buttonText: 'Get Trial Pack',
+  },
+  {
     name: 'Monthly Subscription',
     price: '₹999',
     frequency: '/month',
@@ -445,6 +459,20 @@ export const PRICING_TIERS_INR: PricingTier[] = [
 ];
 
 export const PRICING_TIERS_USD: PricingTier[] = [
+  {
+    name: 'Trial Pack: The Seven-Day Flow',
+    price: '$1',
+    frequency: 'one-time',
+    features: [
+      'Duration: 7 days (fixed window)',
+      'Start date: April 4, 2026',
+      '4 sessions total (Sat + Sun, Tue + Wed)',
+      'Access only to those 4 live/recorded sessions',
+      'Limited-time trial access — one purchase per user',
+    ],
+    isRecommended: false,
+    buttonText: 'Get Trial Pack',
+  },
   {
     name: 'Monthly Subscription',
     price: '$49',

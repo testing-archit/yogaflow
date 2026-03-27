@@ -1,28 +1,37 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { ProblemSolution } from './components/ProblemSolution';
-import { Timeline } from './components/Timeline';
-import { WeeklySchedule } from './components/WeeklySchedule';
-import { Instructors } from './components/Instructors';
-import { FullInstructors } from './components/FullInstructors';
-import { Classes } from './components/Classes';
-import { CommunityPage } from './components/CommunityPage';
-import { Pricing } from './components/Pricing';
-import { FutureVision } from './components/FutureVision';
-import { Footer } from './components/Footer';
-import { About } from './components/About';
-import { MeditationMusic } from './components/MeditationMusic';
-import { Asanas } from './components/Asanas';
-import { Research } from './components/Research';
-import { Contact } from './components/Contact';
-import { CustomCursor } from './components/CustomCursor';
 import { AuthProvider } from './contexts/AuthContext';
-import { PrivacyPolicy } from './components/PrivacyPolicy';
-import { TermsConditions } from './components/TermsConditions';
-import { AdminDashboard } from './components/AdminDashboard';
-import { UserDashboard } from './components/UserDashboard';
+
+const lazyNamed = <T,>(factory: () => Promise<any>, exportName: string) =>
+  React.lazy(async () => {
+    const mod = await factory();
+    return { default: mod[exportName] as T };
+  });
+
+// Lazy-load everything except the above-the-fold essentials.
+const CustomCursor = lazyNamed<React.FC>(() => import('./components/CustomCursor'), 'CustomCursor');
+const ProblemSolution = lazyNamed<React.FC>(() => import('./components/ProblemSolution'), 'ProblemSolution');
+const Timeline = lazyNamed<React.FC<any>>(() => import('./components/Timeline'), 'Timeline');
+const WeeklySchedule = lazyNamed<React.FC<any>>(() => import('./components/WeeklySchedule'), 'WeeklySchedule');
+const Instructors = lazyNamed<React.FC<any>>(() => import('./components/Instructors'), 'Instructors');
+const Contact = lazyNamed<React.FC>(() => import('./components/Contact'), 'Contact');
+const FutureVision = lazyNamed<React.FC>(() => import('./components/FutureVision'), 'FutureVision');
+const Footer = lazyNamed<React.FC<any>>(() => import('./components/Footer'), 'Footer');
+
+const FullInstructors = lazyNamed<React.FC<any>>(() => import('./components/FullInstructors'), 'FullInstructors');
+const Classes = lazyNamed<React.FC<any>>(() => import('./components/Classes'), 'Classes');
+const About = lazyNamed<React.FC<any>>(() => import('./components/About'), 'About');
+const Pricing = lazyNamed<React.FC<any>>(() => import('./components/Pricing'), 'Pricing');
+const CommunityPage = lazyNamed<React.FC>(() => import('./components/CommunityPage'), 'CommunityPage');
+const MeditationMusic = lazyNamed<React.FC>(() => import('./components/MeditationMusic'), 'MeditationMusic');
+const Asanas = lazyNamed<React.FC<any>>(() => import('./components/Asanas'), 'Asanas');
+const Research = lazyNamed<React.FC>(() => import('./components/Research'), 'Research');
+const PrivacyPolicy = lazyNamed<React.FC<any>>(() => import('./components/PrivacyPolicy'), 'PrivacyPolicy');
+const TermsConditions = lazyNamed<React.FC<any>>(() => import('./components/TermsConditions'), 'TermsConditions');
+const AdminDashboard = lazyNamed<React.FC<any>>(() => import('./components/AdminDashboard'), 'AdminDashboard');
+const UserDashboard = lazyNamed<React.FC<any>>(() => import('./components/UserDashboard'), 'UserDashboard');
 
 const AppContent: React.FC = () => {
   // Initialize view based on current path
@@ -177,7 +186,9 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white text-slate-900 selection:bg-teal-100 selection:text-teal-900 antialiased">
-      <CustomCursor />
+      <Suspense fallback={null}>
+        <CustomCursor />
+      </Suspense>
       {view !== 'admin' && (
         <Navbar
           onNavHome={handleNavHome}
@@ -201,13 +212,21 @@ const AppContent: React.FC = () => {
             <Hero onNavPricing={handleNavPricing} />
 
             <div id="journey">
-              <ProblemSolution />
-              <Timeline onNavPricing={handleNavPricing} />
+              <Suspense fallback={null}>
+                <ProblemSolution />
+              </Suspense>
+              <Suspense fallback={null}>
+                <Timeline onNavPricing={handleNavPricing} />
+              </Suspense>
             </div>
 
-            <WeeklySchedule onViewSampleClass={handleViewSampleClass} />
+            <Suspense fallback={null}>
+              <WeeklySchedule onViewSampleClass={handleViewSampleClass} />
+            </Suspense>
 
-            <Instructors onViewProfile={handleViewProfile} />
+            <Suspense fallback={null}>
+              <Instructors onViewProfile={handleViewProfile} />
+            </Suspense>
 
             <div className="py-24 bg-slate-50">
               <div className="max-w-7xl mx-auto px-6 text-center">
@@ -230,40 +249,92 @@ const AppContent: React.FC = () => {
               </div>
             </div>
 
-            <Contact />
-            <FutureVision />
+            <Suspense fallback={null}>
+              <Contact />
+            </Suspense>
+            <Suspense fallback={null}>
+              <FutureVision />
+            </Suspense>
           </>
         )}
 
         {view === 'instructors' && (
-          <FullInstructors onBack={handleNavHome} selectedId={selectedInstructorId} />
+          <Suspense fallback={null}>
+            <FullInstructors onBack={handleNavHome} selectedId={selectedInstructorId} />
+          </Suspense>
         )}
 
-        {view === 'classes' && <Classes initialTab={classesInitialTab} onNavHome={handleNavHome} />}
-        {view === 'about' && <About onContactClick={handleContactClick} />}
-        {view === 'pricing' && <Pricing />}
-        {view === 'community' && <CommunityPage />}
-        {view === 'meditation' && <MeditationMusic />}
-        {view === 'asanas' && <Asanas onNavPricing={handleNavPricing} />}
-        {view === 'research' && <Research />}
-        {view === 'privacy' && <PrivacyPolicy onBack={handleNavHome} />}
-        {view === 'terms' && <TermsConditions onBack={handleNavHome} />}
-        {view === 'admin' && <AdminDashboard onBack={handleNavHome} />}
-        {view === 'dashboard' && <UserDashboard onBack={handleNavHome} initialTab={dashboardInitialTab} onNavAdmin={handleNavAdmin} />}
+        {view === 'classes' && (
+          <Suspense fallback={null}>
+            <Classes initialTab={classesInitialTab} onNavHome={handleNavHome} />
+          </Suspense>
+        )}
+        {view === 'about' && (
+          <Suspense fallback={null}>
+            <About onContactClick={handleContactClick} />
+          </Suspense>
+        )}
+        {view === 'pricing' && (
+          <Suspense fallback={null}>
+            <Pricing />
+          </Suspense>
+        )}
+        {view === 'community' && (
+          <Suspense fallback={null}>
+            <CommunityPage />
+          </Suspense>
+        )}
+        {view === 'meditation' && (
+          <Suspense fallback={null}>
+            <MeditationMusic />
+          </Suspense>
+        )}
+        {view === 'asanas' && (
+          <Suspense fallback={null}>
+            <Asanas onNavPricing={handleNavPricing} />
+          </Suspense>
+        )}
+        {view === 'research' && (
+          <Suspense fallback={null}>
+            <Research />
+          </Suspense>
+        )}
+        {view === 'privacy' && (
+          <Suspense fallback={null}>
+            <PrivacyPolicy onBack={handleNavHome} />
+          </Suspense>
+        )}
+        {view === 'terms' && (
+          <Suspense fallback={null}>
+            <TermsConditions onBack={handleNavHome} />
+          </Suspense>
+        )}
+        {view === 'admin' && (
+          <Suspense fallback={null}>
+            <AdminDashboard onBack={handleNavHome} />
+          </Suspense>
+        )}
+        {view === 'dashboard' && (
+          <Suspense fallback={null}>
+            <UserDashboard onBack={handleNavHome} initialTab={dashboardInitialTab} onNavAdmin={handleNavAdmin} />
+          </Suspense>
+        )}
       </main>
 
       {view !== 'admin' && (
-        <Footer
-          onNavHome={handleNavHome}
-          onNavInstructors={handleNavInstructors}
-          onNavClasses={handleNavClasses}
-          onNavAbout={handleNavAbout}
-          onNavPricing={handleNavPricing}
-          onNavCommunity={handleNavCommunity}
-          onNavPrivacy={handleNavPrivacy}
-          onNavTerms={handleNavTerms}
-          isHomePage={view === 'home'}
-        />
+        <Suspense fallback={null}>
+          <Footer
+            onNavHome={handleNavHome}
+            onNavInstructors={handleNavInstructors}
+            onNavClasses={handleNavClasses}
+            onNavAbout={handleNavAbout}
+            onNavPricing={handleNavPricing}
+            onNavCommunity={handleNavCommunity}
+            onNavPrivacy={handleNavPrivacy}
+            onNavTerms={handleNavTerms}
+            isHomePage={view === 'home'}
+          />
+        </Suspense>
       )}
     </div>
   );

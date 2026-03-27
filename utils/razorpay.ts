@@ -12,6 +12,7 @@ interface RazorpayOptions {
   key: string;
   amount?: number; // Amount in paise (smallest currency unit)
   currency?: string;
+  order_id?: string;
   subscription_id?: string;
   name: string;
   description: string;
@@ -35,7 +36,8 @@ export const initiateRazorpayPayment = (
   planFrequency: string,
   onSuccess?: (response: any) => void,
   onError?: (error: any) => void,
-  keyIdOverride?: string
+  keyIdOverride?: string,
+  orderId?: string
 ) => {
   const keyId = keyIdOverride || RAZORPAY_KEY_ID;
   if (!keyId) {
@@ -48,7 +50,7 @@ export const initiateRazorpayPayment = (
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
     script.onload = () => {
-      openRazorpayCheckout(amount, planName, planFrequency, keyId, onSuccess, onError);
+      openRazorpayCheckout(amount, planName, planFrequency, keyId, onSuccess, onError, orderId);
     };
     script.onerror = () => {
       if (onError) {
@@ -57,7 +59,7 @@ export const initiateRazorpayPayment = (
     };
     document.body.appendChild(script);
   } else {
-    openRazorpayCheckout(amount, planName, planFrequency, keyId, onSuccess, onError);
+    openRazorpayCheckout(amount, planName, planFrequency, keyId, onSuccess, onError, orderId);
   }
 };
 
@@ -101,7 +103,8 @@ const openRazorpayCheckout = (
   planFrequency: string,
   keyId: string,
   onSuccess?: (response: any) => void,
-  onError?: (error: any) => void
+  onError?: (error: any) => void,
+  orderId?: string
 ) => {
   // Amount is already in INR, convert to paise (INR smallest unit)
   // Remove any commas from the amount string if present
@@ -112,6 +115,7 @@ const openRazorpayCheckout = (
     key: keyId,
     amount: amountInPaise,
     currency: 'INR',
+    ...(orderId ? { order_id: orderId } : {}),
     name: 'Yoga Flow',
     description: `${planName} - ${planFrequency}`,
     handler: function (response: any) {

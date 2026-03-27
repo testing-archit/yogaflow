@@ -214,54 +214,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   }, [isAuthenticated, isAdmin, isAdminChecking]);
 
   const loadData = async () => {
+
     setIsLoading(true);
     try {
       console.log('📊 Loading admin data...');
-      
-      // Load users from Firestore
+      // Load users from SQL database via API
       try {
-        console.log('👥 Loading users from Firestore...');
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        const firestoreUsers: UserData[] = usersSnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            name: data.name || 'Unknown',
-            email: data.email || '',
-            joinDate: data.joinDate || data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-            plan: data.plan || null,
-            role: typeof data.role === 'string' ? data.role : undefined,
-            isAdmin: data.isAdmin === true,
-            roles: Array.isArray(data.roles) ? data.roles : undefined,
-            lastLogin: data.lastLoginAt?.toDate?.()?.toISOString() || null,
-            classesAttended: typeof data.classesAttended === 'number' ? data.classesAttended : 0,
-            hoursPracticed: typeof data.hoursPracticed === 'number' ? data.hoursPracticed : 0,
-            streak: typeof data.streak === 'number' ? data.streak : 0,
-            source: 'firebase' as const,
-          };
-        });
-        console.log(`✅ Loaded ${firestoreUsers.length} users from Firestore`);
-        
-        // Also load localStorage users (for backward compatibility)
-        const localUsers = JSON.parse(localStorage.getItem('yogaFlowUsers') || '[]');
-        const localStorageUsers: UserData[] = localUsers.map((u: any) => ({
+        console.log('👥 Loading users from SQL database...');
+        // Dynamically import apiClient to avoid circular dependency
+        const { apiClient } = await import('../utils/apiClient');
+        const sqlUsers = await apiClient.get('user');
+        const users: UserData[] = sqlUsers.map((u: any) => ({
           id: u.id,
-          name: u.name,
-          email: u.email,
-          joinDate: u.joinDate,
-          plan: u.plan,
-          source: 'localStorage' as const,
+          name: u.name || 'Unknown',
+          email: u.email || '',
+          joinDate: u.createdAt || new Date().toISOString(),
+          plan: u.Subscription?.planId || null,
+          role: typeof u.role === 'string' ? u.role : undefined,
+          isAdmin: u.role === 'admin' || u.role === 'ADMIN',
+          roles: u.roles || undefined,
+          lastLogin: u.updatedAt || null,
+          classesAttended: u.classesAttended || 0,
+          hoursPracticed: u.hoursPracticed || 0,
+          streak: u.streak || 0,
+          source: 'sql' as const,
         }));
-
-        // Combine users (Firestore users first, then localStorage)
-        const allUsers = [...firestoreUsers, ...localStorageUsers];
-        console.log(`📊 Total users: ${allUsers.length} (${firestoreUsers.length} from Firestore, ${localStorageUsers.length} from localStorage)`);
-        setUsers(allUsers);
+        setUsers(users);
+        console.log(`✅ Loaded ${users.length} users from SQL database`);
       } catch (error: any) {
-        console.error('❌ Error loading users:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        // Set empty array on error
+        console.error('❌ Error loading users from SQL database:', error);
         setUsers([]);
       }
 

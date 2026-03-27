@@ -27,6 +27,8 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
   const [pricingTiersUSD, setPricingTiersUSD] = useState<PricingTier[]>(PRICING_TIERS_USD);
   const [razorpayKeyId, setRazorpayKeyId] = useState<string>('');
   const [userSubscription, setUserSubscription] = useState<any | null>(null);
+  const [hasTrialEntitlement, setHasTrialEntitlement] = useState<boolean>(false);
+  const [hasFullCourseEntitlement, setHasFullCourseEntitlement] = useState<boolean>(false);
 
   const readJson = async (resp: Response) => {
     const text = await resp.text();
@@ -72,6 +74,8 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
   useEffect(() => {
     if (!isAuthenticated || !user?.id) {
       setUserSubscription(null);
+      setHasTrialEntitlement(false);
+      setHasFullCourseEntitlement(false);
       return;
     }
 
@@ -87,6 +91,22 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
     );
     return unsubscribe;
   }, [isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setHasTrialEntitlement(false);
+      setHasFullCourseEntitlement(false);
+      return;
+    }
+    fetch('/api/entitlements/trial')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: any) => setHasTrialEntitlement(!!j?.hasPurchased))
+      .catch(() => setHasTrialEntitlement(false));
+    fetch('/api/entitlements/full-course')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: any) => setHasFullCourseEntitlement(!!j?.hasPurchased))
+      .catch(() => setHasFullCourseEntitlement(false));
+  }, [isAuthenticated]);
 
   const getCurrentPeriodEnd = (tier: PricingTier): Date => {
     const now = new Date();
@@ -149,6 +169,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
     const frequency = (tier.frequency || '').toLowerCase();
     return frequency.includes('month') || frequency === '/month';
   };
+  const isTrialTier = (tier: PricingTier) => normalize(tier.name).includes('seven-day flow') || normalize(tier.name).includes('trial pack');
 
   const normalize = (value: any) => (value ?? '').toString().toLowerCase();
   const isSubscriptionActive = (() => {
@@ -161,7 +182,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
   })();
   const currentPlan = normalize(userSubscription?.planType || user?.plan);
   const hasMonthly = isSubscriptionActive && currentPlan.includes('monthly');
-  const hasFullCourse = isSubscriptionActive && currentPlan.includes('full course');
+  const hasFullCourse = hasFullCourseEntitlement || (isSubscriptionActive && currentPlan.includes('full course'));
 
   const startAutopaySubscription = async (tier: PricingTier) => {
     if (!user?.id) {
@@ -395,6 +416,103 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       return;
     }
 
+    if (isTrialTier(tier)) {
+      if (hasTrialEntitlement) return;
+      try {
+        const resp = await fetch('/api/razorpay/trial-order', { method: 'POST' });
+        const data: any = await readJson(resp);
+        if (!resp.ok) throw new Error(data?.error || `Failed to create trial order (${resp.status})`);
+        const keyId = (typeof data?.keyId === 'string' && data.keyId.trim()) ? data.keyId.trim() : await ensureRazorpayKeyId();
+        if (!keyId) throw new Error('Missing Razorpay client configuration (set VITE_RAZORPAY_KEY_ID)');
+        const orderId = typeof data?.orderId === 'string' ? data.orderId : '';
+        if (!orderId) throw new Error('Missing order id');
+
+        initiateRazorpayPayment(
+          29,
+          tier.name,
+          tier.frequency,
+          async (response) => {
+            try {
+              const verifyResp = await fetch('/api/razorpay/trial-order', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(response),
+              });
+              const verified: any = await readJson(verifyResp);
+              if (!verifyResp.ok || !verified?.ok) {
+                throw new Error(verified?.error || 'Trial verification failed');
+              }
+              setHasTrialEntitlement(true);
+              alert(`Trial pack activated! Payment ID: ${response.razorpay_payment_id}`);
+            } catch (err: any) {
+              console.error('Trial verification error:', err);
+              alert(err?.message || 'Trial verification failed. Please contact support.');
+            }
+          },
+          (error) => {
+            console.error('Trial payment error:', error);
+            if (error?.message !== 'Payment cancelled by user') {
+              alert(error?.message || 'Payment failed. Please try again.');
+            }
+          },
+          keyId || undefined,
+          orderId
+        );
+      } catch (e: any) {
+        alert(e?.message || 'Failed to start trial purchase.');
+      }
+      return;
+    }
+
+    const isFullCourseTier = normalize(tier.name).includes('full course');
+    if (isFullCourseTier) {
+      if (hasFullCourse) return;
+      try {
+        const resp = await fetch('/api/razorpay/full-course-order', { method: 'POST' });
+        const data: any = await readJson(resp);
+        if (!resp.ok) throw new Error(data?.error || `Failed to create order (${resp.status})`);
+        const keyId = (typeof data?.keyId === 'string' && data.keyId.trim()) ? data.keyId.trim() : await ensureRazorpayKeyId();
+        if (!keyId) throw new Error('Missing Razorpay client configuration (set VITE_RAZORPAY_KEY_ID)');
+        const orderId = typeof data?.orderId === 'string' ? data.orderId : '';
+        if (!orderId) throw new Error('Missing order id');
+
+        initiateRazorpayPayment(
+          4499,
+          tier.name,
+          tier.frequency,
+          async (response) => {
+            try {
+              const verifyResp = await fetch('/api/razorpay/full-course-order', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(response),
+              });
+              const verified: any = await readJson(verifyResp);
+              if (!verifyResp.ok || !verified?.ok) {
+                throw new Error(verified?.error || 'Verification failed');
+              }
+              setHasFullCourseEntitlement(true);
+              alert(`Enrolled! Payment ID: ${response.razorpay_payment_id}`);
+            } catch (err: any) {
+              console.error('Full course verification error:', err);
+              alert(err?.message || 'Verification failed. Please contact support.');
+            }
+          },
+          (error) => {
+            console.error('Full course payment error:', error);
+            if (error?.message !== 'Payment cancelled by user') {
+              alert(error?.message || 'Payment failed. Please try again.');
+            }
+          },
+          keyId || undefined,
+          orderId
+        );
+      } catch (e: any) {
+        alert(e?.message || 'Failed to start purchase.');
+      }
+      return;
+    }
+
     const keyId = await ensureRazorpayKeyId();
     initiateRazorpayPayment(
       amount,
@@ -417,7 +535,8 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
     <section className="bg-white py-32 md:py-48 px-6 relative overflow-hidden">
       {/* Background Decorative Elements */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none -z-10">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-teal-50 rounded-full blur-[120px] opacity-40"></div>
+        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[820px] h-[820px] bg-teal-50 rounded-full blur-[120px] opacity-60"></div>
+        <div className="absolute -bottom-40 -left-40 w-[720px] h-[720px] bg-amber-50 rounded-full blur-[140px] opacity-60"></div>
       </div>
 
       <div className="max-w-7xl mx-auto">
@@ -457,25 +576,38 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
           </Reveal>
         )}
 
-        <div className="grid lg:grid-cols-2 gap-10 md:gap-16 items-start mt-16 max-w-5xl mx-auto">
+        <div
+          className={`grid gap-10 md:gap-12 items-start mt-16 mx-auto ${
+            currentPricingTiers.length >= 3
+              ? 'max-w-7xl grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+              : 'max-w-5xl lg:grid-cols-2'
+          }`}
+        >
           {currentPricingTiers.map((tier, idx) => (
             <Reveal key={idx} delay={idx * 0.1}>
               {(() => {
                 const isMonthly = isMonthlyTier(tier);
                 const isFull = normalize(tier.name).includes('full course');
-                const disabled = (isMonthly && (hasMonthly || hasFullCourse)) || (isFull && hasFullCourse);
+                const isTrial = isTrialTier(tier);
+                const disabled = (isMonthly && (hasMonthly || hasFullCourse)) || (isFull && hasFullCourse) || (isTrial && hasTrialEntitlement);
                 const buttonText = isFull
                   ? (hasFullCourse ? 'Enrolled' : hasMonthly ? 'Upgrade Now' : tier.buttonText)
+                  : isTrial
+                  ? (hasTrialEntitlement ? 'Already Purchased' : tier.buttonText)
                   : (hasMonthly ? 'Current Plan' : hasFullCourse ? 'Included' : tier.buttonText);
 
                 return (
               <div 
-                className={`relative rounded-[3rem] p-10 md:p-14 transition-all duration-700 h-full flex flex-col ${
-                  tier.isRecommended 
-                  ? 'bg-slate-900 text-white shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] scale-105 z-10' 
-                  : 'bg-white border border-slate-100 shadow-sm hover:shadow-xl'
+                className={`group relative rounded-[2.5rem] p-10 md:p-12 transition-all duration-500 h-full flex flex-col ${
+                  tier.isRecommended
+                  ? 'bg-slate-950 text-white shadow-[0_30px_80px_-30px_rgba(2,6,23,0.65)] ring-1 ring-white/10'
+                  : 'bg-white/80 backdrop-blur border border-slate-100 shadow-sm hover:shadow-[0_24px_60px_-30px_rgba(2,6,23,0.25)] hover:-translate-y-1'
                 }`}
               >
+                {/* Subtle gradient border for recommended */}
+                {tier.isRecommended && (
+                  <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] ring-1 ring-teal-400/20"></div>
+                )}
                 {tier.isRecommended && (
                   <div className="absolute top-8 right-8">
                     <span className="bg-teal-500 text-white text-[10px] font-bold px-4 py-1.5 rounded-full uppercase tracking-[0.2em] shadow-lg">
@@ -488,7 +620,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
                   {tier.isRecommended ? (
                     <Zap className="text-teal-400 mb-6" size={32} />
                   ) : (
-                    <ShieldCheck className="text-teal-600 mb-6" size={32} />
+                    <ShieldCheck className="text-teal-700 mb-6" size={32} />
                   )}
                   <h3 className={`text-2xl md:text-3xl font-serif font-bold mb-3 ${tier.isRecommended ? 'text-white' : 'text-slate-900'}`}>
                     {tier.name}
@@ -524,8 +656,8 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
                   variant={tier.isRecommended ? 'primary' : 'outline'} 
                   className={`w-full py-6 rounded-full text-sm tracking-widest uppercase font-bold transition-all duration-500 ${
                     tier.isRecommended 
-                    ? 'bg-teal-500 hover:bg-teal-400 border-none shadow-[0_20px_40px_-10px_rgba(20,184,166,0.3)] hover:scale-[1.02]' 
-                    : 'hover:bg-teal-600 hover:text-white'
+                    ? 'bg-teal-500 hover:bg-teal-400 border-none shadow-[0_18px_40px_-14px_rgba(20,184,166,0.55)] hover:scale-[1.01]' 
+                    : 'border-slate-200 text-slate-800 hover:bg-slate-900 hover:text-white hover:border-slate-900'
                   } disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
                   disabled={disabled}
                   onClick={() => {

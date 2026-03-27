@@ -113,6 +113,19 @@ model User {
   CommunityConversation CommunityConversation[]
   CommunityMessage      CommunityMessage[]
   Subscription          Subscription?
+  Entitlement           Entitlement[]
+}
+
+model Entitlement {
+  id         String   @id
+  userId     String
+  productKey String
+  purchasedAt DateTime @default(now())
+
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productKey])
+  @@index([productKey])
 }
 
 model YogaClass {
