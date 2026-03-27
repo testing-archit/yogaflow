@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------------------
+// USERS & AUTHENTICATION
+// -----------------------------------------
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+model User {
+  id        String   @id @default(uuid())
+  firebaseId String?  @unique // Linking Firebase Auth User ID
+  email     String   @unique
+  name      String?
+  role      Role     @default(USER)
+  avatarUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  subscription Subscription?
+  messages     CommunityMessage[]
+  conversations CommunityConversation[]
+}
+
+// -----------------------------------------
+// SUBSCRIPTIONS & BILLING (Razorpay)
+// -----------------------------------------
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  CANCELLED
+  TRIAL
+}
+
+model Subscription {
+  id             String             @id @default(uuid())
+  userId         String             @unique
+  razorpaySubId  String?            @unique
+  planId         String
+  status         SubscriptionStatus @default(INACTIVE)
+  trialEndsAt    DateTime?
+  validUntil     DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relationships
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+// -----------------------------------------
+// YOGA CORE DOMAIN (Classes, Instructors, Asanas)
+// -----------------------------------------
+model Instructor {
+  id        String   @id @default(uuid())
+  name      String
+  bio       String?
+  avatarUrl String?
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classes   YogaClass[]
+}
+
+model YogaClass {
+  id           String     @id @default(uuid())
+  title        String
+  description  String?
+  durationMins Int?
+  duration     String?
+  videoUrl     String?
+  thumbnailUrl String?
+  instructorId String?
+  instructor   String?
+  isActive     Boolean    @default(true)
+  type         String?
+  level        String?
+  category     String?
+  time         String?
+  focus        String[]   @default([])
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model ClassVideo {
+  id        String   @id @default(uuid())
+  title     String
+  classId   String
+  videoUrl  String
+  createdAt DateTime @default(now())
+}
+
+model Asana {
+  id            String   @id @default(uuid())
+  englishName   String
+  sanskritName  String
+  description   String?
+  benefits      String?
+  imageUrl      String?
+  difficulty    String   @default("Beginner")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// -----------------------------------------
+// COMMUNITY (Forums / Messages)
+// -----------------------------------------
+model CommunityConversation {
+  id        String             @id @default(uuid())
+  title     String
+  authorId  String
+  isActive  Boolean            @default(true)
+
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model CommunityMessage {
+  id             String                @id @default(uuid())
+  text           String
+  authorId       String
+  conversationId String
+
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([conversationId, createdAt])
+}
+
+// -----------------------------------------
+// MISCELLANEOUS / EXTERNAL (Research, Lead Gen)
+// -----------------------------------------
+model ResearchTopic {
+  id          String   @id @default(uuid())
+  title       String
+  summary     String?
+  paperLink   String?
+  publishedAt DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ContactForm {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  message   String
+  isRead    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     String   // Usually a JSON stringifiable payload
+  updatedAt DateTime @updatedAt
+}
+
