@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/jpeg" href="https://res.cloudinary.com/dvue1idmp/image/upload/v1767086031/yoga_flow_tjmk50.jpg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yoga Flow | Authentic Rishikesh Transformation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              teal: {
+                50: '#f0fdfa',
+                100: '#ccfbf1',
+                200: '#99f6e4',
+                500: '#14b8a6',
+                600: '#0d9488', // Main Brand Color
+                700: '#0f766e',
+                800: '#115e59',
+                900: '#134e4a',
+              },
+              slate: {
+                900: '#0f172a', // Near Black
+              },
+              amber: {
+                400: '#fbbf24', // Sacred Gold
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              serif: ['Playfair Display', 'serif'],
+            },
+            animation: {
+              'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+              'slow-pulse': 'slowPulse 4s ease-in-out infinite',
+              'spin-slow': 'spin 8s linear infinite',
+            },
+            keyframes: {
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              slowPulse: {
+                '0%, 100%': { opacity: '0.4' },
+                '50%': { opacity: '0.7' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        scroll-padding-top: 80px;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: white;
+        color: #0f172a;
+        overflow-x: hidden;
+        ::selection {
+          background: rgba(13, 148, 136, 0.2);
+          color: #0f766e;
+        }
+      }
+      /* Hide default cursor on desktop */
+      @media (min-width: 768px) {
+        *, html, body, a, button, [role="button"], .cursor-pointer, input, textarea, select {
+          cursor: none !important;
+        }
+      }
+      h1, h2, h3, h4, h5, h6 {
+        font-family: 'Playfair Display', serif;
+      }
+      .reveal {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal.active {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .img-hover-zoom {
+        transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .group:hover .img-hover-zoom {
+        transform: scale(1.05);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+</body>
+</html>
