@@ -5,7 +5,7 @@ import { Menu, X, User } from 'lucide-react';
 import { LOGO_URL } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import { LoginModal, SignupModal } from './LoginModal';
-import { ProfileDropdown } from './ProfileDropdown';
+import { Show, UserButton } from '@clerk/react';
 
 interface NavbarProps {
   onNavHome: () => void;
@@ -16,6 +16,7 @@ interface NavbarProps {
   onNavCommunity: () => void;
   onNavMeditation?: () => void;
   onNavAsanas?: () => void;
+  onNavResearch?: () => void;
   onNavAdmin?: () => void;
   onNavDashboard?: (tab?: 'profile' | 'asanas' | 'classes' | 'subscription') => void;
   isHomePage: boolean;
@@ -82,11 +83,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const navLinks = [
     { name: 'Journey', href: '#journey', action: onNavHome },
-    { name: 'Asanas', href: '#asanas', action: onNavAsanas },
     { name: 'Classes', href: '#classes', action: onNavClasses },
-    { name: 'Research', href: '#research', action: onNavResearch },
-    { name: 'Community', href: '#community', action: onNavCommunity },
+    { name: 'Meditation', href: '#meditation', action: onNavMeditation },
     { name: 'Instructors', href: '#instructors', action: onNavInstructors },
+    { name: 'Community', href: '#community', action: onNavCommunity },
+    { name: 'About', href: '#about', action: onNavAbout },
     { name: 'Pricing', href: '#pricing', action: onNavPricing }
   ];
 
@@ -159,47 +160,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             Start Free Month
           </Button>
 
-          {/* Profile Icon */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                if (isAuthenticated) {
-                  if (onNavDashboard) {
-                    setIsProfileDropdownOpen(false);
-                    onNavDashboard('profile');
-                  } else {
-                    setIsProfileDropdownOpen(!isProfileDropdownOpen);
-                  }
-                } else {
+          {/* Profile Section */}
+          <div className="relative flex items-center">
+            <Show when="signed-out">
+              <button
+                onClick={() => {
                   setShouldNavigateToDashboard(true);
                   setIsLoginModalOpen(true);
-                }
-              }}
-              className={`relative flex items-center justify-center rounded-full transition-all duration-300 hover:scale-110 active:scale-95 ${isScrolled
-                  ? 'w-9 h-9'
-                  : 'w-10 h-10'
-                } ${isAuthenticated
-                  ? 'bg-teal-600 text-white shadow-lg hover:shadow-xl'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              aria-label={isAuthenticated ? 'Profile' : 'Login'}
-            >
-              {isAuthenticated && user ? (
-                <span className="font-bold text-sm">
-                  {user.name.charAt(0).toUpperCase()}
-                </span>
-              ) : (
+                }}
+                className={`relative flex items-center justify-center rounded-full transition-all duration-300 hover:scale-110 active:scale-95 ${isScrolled ? 'w-9 h-9' : 'w-10 h-10'} bg-slate-100 text-slate-600 hover:bg-slate-200`}
+                aria-label="Login"
+              >
                 <User size={isScrolled ? 16 : 18} />
-              )}
-            </button>
-            {isAuthenticated && (
-              <ProfileDropdown
-                isOpen={isProfileDropdownOpen}
-                onClose={() => setIsProfileDropdownOpen(false)}
-                onNavAdmin={onNavAdmin}
-                onNavDashboard={onNavDashboard}
+              </button>
+            </Show>
+            <Show when="signed-in">
+              <UserButton 
+                appearance={{
+                  elements: {
+                    userButtonAvatarBox: isScrolled ? 'w-9 h-9' : 'w-10 h-10',
+                    userButtonTrigger: 'hover:scale-110 active:scale-95 transition-all'
+                  }
+                }}
               />
-            )}
+            </Show>
           </div>
         </div>
 
@@ -275,40 +259,41 @@ export const Navbar: React.FC<NavbarProps> = ({
               Start Free Month
             </Button>
 
-            {/* Mobile Profile Button */}
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                if (isAuthenticated) {
-                  if (onNavDashboard) {
-                    onNavDashboard('profile');
-                  } else {
-                    setIsProfileDropdownOpen(true);
-                  }
-                } else {
-                  setShouldNavigateToDashboard(true);
-                  setIsLoginModalOpen(true);
-                }
-              }}
-              className={`w-full flex items-center justify-center gap-3 rounded-3xl py-6 font-bold transition-all ${isAuthenticated
-                  ? 'bg-teal-600 text-white shadow-2xl hover:bg-teal-700'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-            >
-              {isAuthenticated && user ? (
-                <>
-                  <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center font-bold">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <span>Profile</span>
-                </>
-              ) : (
-                <>
+            {/* Mobile Profile Section */}
+            <div className="pt-4">
+              <Show when="signed-out">
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setShouldNavigateToDashboard(true);
+                    setIsLoginModalOpen(true);
+                  }}
+                  className="w-full h-16 bg-slate-100 rounded-3xl flex items-center justify-center gap-3 text-slate-700 font-bold hover:bg-slate-200 transition-all shadow-sm active:scale-95"
+                >
                   <User size={20} />
                   <span>Login / Sign Up</span>
-                </>
-              )}
-            </button>
+                </button>
+              </Show>
+              <Show when="signed-in">
+                <div className="w-full bg-teal-50/50 rounded-3xl p-4 border border-teal-100/50 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <UserButton />
+                    <span className="font-serif font-bold text-slate-900">Your Account</span>
+                  </div>
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    className="rounded-2xl"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onNavDashboard?.('profile');
+                    }}
+                  >
+                    Dashboard
+                  </Button>
+                </div>
+              </Show>
+            </div>
           </div>
         </div>
       </div>

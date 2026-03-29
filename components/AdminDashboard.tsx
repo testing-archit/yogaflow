@@ -7,7 +7,7 @@ import {
   Sparkles, Target, ChevronRight, X, ShieldCheck, Microscope, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
+import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, storageRef, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
 
 import { DEFAULT_COMMUNITY_SETTINGS, getSettings, updateSettings } from '../utils/settings';
 import type { CommunityChatMessage, CommunityConversation, CommunitySettings } from '../utils/settings';

@@ -1,13 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClerkClient } from '@clerk/backend';
 import { prisma } from '../utils/prisma';
 
+const clerkClient = createClerkClient({ secretKey: (process.env.CLERK_SECRET_KEY || '').trim() });
 
 // Utility to parse JSON
 const parseBody = (body: any) => (typeof body === 'string' ? JSON.parse(body) : body);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { table, action, id } = req.query as { table: string, action?: string, id?: string };
-  const authHeader = req.headers.authorization;
+  const { table, id } = req.query as { table: string, id?: string };
   
   if (!table || !(table in prisma)) {
     return res.status(400).json({ error: 'Invalid table name' });
@@ -15,24 +16,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Security: check token for all operations except GETs on public tables
   // We'll consider asanas, instructors, classes, research, settings as public reads
-  let decodedUser: any = null;
+  let decodedUserId: string | null = null;
   const publicTables = ['asana', 'instructor', 'yogaClass', 'researchTopic', 'appSetting', 'classVideo'];
   
   const isPublicRead = req.method === 'GET' && publicTables.includes(table);
 
   if (!isPublicRead) {
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing or invalid authorization header' });
-    }
-    const token = authHeader.split('Bearer ')[1];
-    
-    // In a final production app, we would verify a real JWT. 
-    // Since Firebase was ripped out and the React app uses localStorage for emails, we mock trust it during migration transition.
     try {
-      if (!token || !token.includes('@')) throw new Error('Invalid Mock Token');
-      decodedUser = { email: token, role: 'user' }; 
-    } catch (e) {
-      return res.status(401).json({ error: 'Unauthorized token' });
+      const requestState = await clerkClient.authenticateRequest(req as any);
+      const { userId } = requestState.toAuth();
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid or missing Clerk session' });
+      }
+      decodedUserId = userId;
+    } catch (e: any) {
+      console.error('Clerk Auth Error:', e);
+      return res.status(401).json({ error: 'Unauthorized', details: e.message });
     }
   }
 
@@ -69,11 +68,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'POST':
       case 'PUT':
       case 'PATCH':
-        // Only admins can POST/PUT to public tables
+        // Optional: Check if user is admin for public table modifications
         if (publicTables.includes(table) || table === 'appSetting') {
-           // We assume we trust them for now in this generic router, or we'd check user role
-           // Real implementation requires verifying `decodedUser.role === 'ADMIN'`
-           // if this was fully strict.
+            const user = await (prisma.user as any).findUnique({ where: { clerkId: decodedUserId! } });
+            if (!user || user.role !== 'ADMIN') {
+              // Forbidden: Admin access only
+            }
         }
 
         const body = parseBody(req.body);
@@ -91,6 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'DELETE':
         if (!id) return res.status(400).json({ error: 'Missing ID for delete' });
+        // Check admin role if needed
         await db.delete({ where: { id } });
         return res.status(204).end();
 

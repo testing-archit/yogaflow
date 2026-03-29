@@ -1,12 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { SectionHeading } from './SectionHeading';
 import { INSTRUCTORS } from '../constants';
 import { Award, ShieldCheck, ChevronRight } from 'lucide-react';
 import { Reveal } from './Reveal';
 import { Instructor } from '../types';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
-
+import { apiClient } from '../utils/apiClient';
 
 interface InstructorsProps {
   onViewProfile?: (id: string) => void;
@@ -16,17 +14,11 @@ export const Instructors: React.FC<InstructorsProps> = ({ onViewProfile }) => {
   const [instructors, setInstructors] = useState<Instructor[]>(INSTRUCTORS);
 
   useEffect(() => {
-    const ref = collection(db, 'instructors');
-    const unsubscribe = onSnapshot(ref, (snapshot) => {
-      const loadedInstructors: Instructor[] = snapshot.docs
-        .map(doc => doc.data() as Instructor)
-        .filter(instructor => !(instructor as any).deleted);
-      setInstructors(loadedInstructors);
-    }, (error) => {
-      console.error('Error loading instructors:', error);
-    });
-    return () => unsubscribe();
+    apiClient.get('instructor').then((data: Instructor[]) => {
+      if (Array.isArray(data) && data.length > 0) setInstructors(data);
+    }).catch(() => {/* keep constants */});
   }, []);
+
 
   return (
     <section id="instructors" className="bg-white pt-4 md:pt-8 pb-12 md:pb-20 px-4 md:px-6 relative">

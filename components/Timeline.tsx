@@ -5,7 +5,7 @@ import { TIMELINE_STEPS } from '../constants';
 import { Quote, Check, ArrowDown, Battery, Brain, Activity, User, ShieldCheck, Heart, Trees, Moon, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { LoginModal, SignupModal } from './LoginModal';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
+import { getSettings } from '../utils/settings';
 
 import type { JourneySettings, JourneyTimelineStepSettings } from '../types';
 
@@ -153,19 +153,11 @@ export const Timeline: React.FC<TimelineProps> = ({ onNavPricing }) => {
   );
 
   useEffect(() => {
-    const settingsRef = doc(db, 'settings', 'app_settings');
-    const unsubscribe = onSnapshot(
-      settingsRef,
-      (snap) => {
-        const data = (snap.data() as any) || {};
-        setSettings((data.journey as JourneySettings) || null);
-      },
-      (error) => {
-        console.error('❌ Journey settings read failed:', error);
-        setSettings(null);
-      }
-    );
-    return unsubscribe;
+    getSettings().then((settings) => {
+      if (settings.journey) setSettings(settings.journey as JourneySettings);
+    }).catch((error) => {
+      console.error('❌ Journey settings read failed:', error);
+    });
   }, []);
 
   const handleReadyToStart = () => {
@@ -250,6 +242,7 @@ export const Timeline: React.FC<TimelineProps> = ({ onNavPricing }) => {
       {/* Login and Signup Modals */}
       {isLoginModalOpen && (
         <LoginModal
+          isOpen={isLoginModalOpen}
           onClose={() => setIsLoginModalOpen(false)}
           onSwitchToSignup={() => {
             setIsLoginModalOpen(false);
@@ -260,6 +253,7 @@ export const Timeline: React.FC<TimelineProps> = ({ onNavPricing }) => {
 
       {isSignupModalOpen && (
         <SignupModal
+          isOpen={isSignupModalOpen}
           onClose={() => setIsSignupModalOpen(false)}
           onSwitchToLogin={() => {
             setIsSignupModalOpen(false);

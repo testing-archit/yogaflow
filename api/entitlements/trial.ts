@@ -1,38 +1,44 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import jwt from 'jsonwebtoken';
+import { createClerkClient } from '@clerk/backend';
 import { prisma } from '../../utils/prisma';
 
 const PRODUCT_KEY = 'TRIAL_SEVEN_DAY_FLOW';
-
-function getCookieValue(cookieHeader: string | undefined, name: string) {
-  if (!cookieHeader) return undefined;
-  const matched = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
-  return matched?.[1];
-}
-
-function getUserIdFromSession(req: VercelRequest) {
-  const token = (req as any).cookies?.session || getCookieValue(req.headers.cookie, 'session');
-  if (!token) return null;
-  const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret) return null;
-  try {
-    const payload = jwt.verify(token, jwtSecret) as { userId: string };
-    return payload.userId || null;
-  } catch {
-    return null;
-  }
-}
+const clerkClient = createClerkClient({ secretKey: (process.env.CLERK_SECRET_KEY || '').trim() });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const userId = getUserIdFromSession(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthenticated' });
+  try {
+    const authHeader = (req.headers?.authorization as string) || '';
+    const cookieHeader = (req.headers?.cookie as string) || '';
+    const fakeRequest = new Request(`http://localhost${req.url || '/'}`, {
+      method: req.method || 'GET',
+      headers: {
+        ...(authHeader ? { authorization: authHeader } : {}),
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      },
+    });
+    const requestState = await clerkClient.authenticateRequest(fakeRequest);
+    const { userId } = requestState.toAuth();
+    
+    if (!userId) return res.status(401).json({ error: 'Unauthenticated' });
 
-  const existing = await prisma.entitlement.findUnique({
-    where: { userId_productKey: { userId, productKey: PRODUCT_KEY } },
-  });
+    // Find internal user ID
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ clerkId: userId }, { firebaseId: userId }]
+      }
+    });
 
-  return res.status(200).json({ productKey: PRODUCT_KEY, hasPurchased: !!existing });
+    if (!user) return res.status(200).json({ productKey: PRODUCT_KEY, hasPurchased: false });
+
+    const existing = await prisma.entitlement.findUnique({
+      where: { userId_productKey: { userId: user.id, productKey: PRODUCT_KEY } },
+    });
+
+    return res.status(200).json({ productKey: PRODUCT_KEY, hasPurchased: !!existing });
+  } catch (error: any) {
+    console.error('Trial entitlement check error:', error);
+    return res.status(500).json({ error: error.message });
+  }
 }
-

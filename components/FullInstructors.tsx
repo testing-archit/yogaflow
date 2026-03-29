@@ -2,8 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { INSTRUCTORS } from '../constants';
 import { Button } from './Button';
-import { ArrowLeft, Award, BookOpen, Star, Instagram, Youtube, MapPin } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Award, BookOpen, Star, Instagram, Youtube, MapPin } from 'lucide-react';
 import { Reveal } from './Reveal';
+import { apiClient } from '../utils/apiClient';
 import { Instructor } from '../types';
 interface FullInstructorsProps {
   onBack: () => void;
@@ -13,7 +14,11 @@ interface FullInstructorsProps {
 export const FullInstructors: React.FC<FullInstructorsProps> = ({ onBack, selectedId }) => {
   const [instructors, setInstructors] = useState<Instructor[]>(INSTRUCTORS);
 
-
+  useEffect(() => {
+    apiClient.get('instructor').then((data: Instructor[]) => {
+      if (Array.isArray(data) && data.length > 0) setInstructors(data);
+    }).catch(() => {});
+  }, []);
   const displayInstructors = selectedId 
     ? instructors.filter(i => i.id === selectedId)
     : instructors;
@@ -58,6 +63,17 @@ export const FullInstructors: React.FC<FullInstructorsProps> = ({ onBack, select
                   </div>
                   
                   <div className="space-y-4">
+                    <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Contact Information</h3>
+                    {instructor.contact && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-slate-600 hover:text-teal-600 transition-colors">
+                          <Phone size={16} /> <span className="text-sm font-medium">{instructor.contact.phone}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-600 hover:text-teal-600 transition-colors">
+                          <Mail size={16} /> <span className="text-sm font-medium">{instructor.contact.email}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-3 text-slate-600">
                       <MapPin size={16} /> <span className="text-sm font-medium">{instructor.lineage}</span>
                     </div>

@@ -14,8 +14,40 @@ function getCookieValue(cookieHeader: string | undefined, name: string) {
   return matched?.[1];
 }
 
-function getUserIdFromSession(req: any) {
-  const token = (req as any).cookies?.session || getCookieValue(req.headers.cookie, 'session');
+import { createClerkClient } from '@clerk/backend';
+
+async function getUserIdFromSession(req: any) {
+  const clerkSecretKey = (process.env.CLERK_SECRET_KEY || '').trim();
+  if (!clerkSecretKey) {
+    console.error('CLERK_SECRET_KEY is not set');
+    return null;
+  }
+
+  try {
+    const clerkClient = createClerkClient({ secretKey: clerkSecretKey.trim() });
+
+    // Build a proper Request object so Clerk can inspect headers (incl. Authorization Bearer)
+    const authHeader = req.headers?.authorization || '';
+    const cookieHeader = req.headers?.cookie || '';
+    const url = `http://localhost${req.url || '/'}`;
+
+    const fakeRequest = new Request(url, {
+      method: req.method || 'GET',
+      headers: {
+        ...(authHeader ? { authorization: authHeader } : {}),
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      },
+    });
+
+    const requestState = await clerkClient.authenticateRequest(fakeRequest);
+    const { userId } = requestState.toAuth();
+    if (userId) return userId;
+  } catch (e) {
+    console.error('Clerk Auth Error in Razorpay:', e);
+  }
+
+  // Fallback: legacy JWT session cookie
+  const token = (req as any).cookies?.session || getCookieValue(req.headers?.cookie, 'session');
   if (!token) return null;
   const jwtSecret = process.env.JWT_SECRET;
   if (!jwtSecret) return null;
@@ -25,6 +57,18 @@ function getUserIdFromSession(req: any) {
   } catch {
     return null;
   }
+}
+
+async function resolveUserInternalId(externalId: string) {
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { clerkId: externalId },
+        { firebaseId: externalId }
+      ]
+    }
+  });
+  return user;
 }
 
 const readJsonBody = async (req: any) => {
@@ -48,8 +92,9 @@ const getRawBody = async (req: any) => {
 
 export default async function handler(req: any, res: any) {
   const { action } = req.query;
-  const keyId = process.env.RAZORPAY_KEY_ID ?? process.env.VITE_RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET ?? process.env.VITE_RAZORPAY_KEY_SECRET;
+  // Trim whitespace/newlines that can sneak into .env values
+  const keyId = (process.env.RAZORPAY_KEY_ID ?? process.env.VITE_RAZORPAY_KEY_ID ?? '').trim();
+  const keySecret = (process.env.RAZORPAY_KEY_SECRET ?? process.env.VITE_RAZORPAY_KEY_SECRET ?? '').trim();
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
   // GET /api/razorpay?action=key-id
@@ -192,36 +237,196 @@ export default async function handler(req: any, res: any) {
   // POST /api/razorpay?action=full-course-order
   if (req.method === 'POST' && action === 'full-course-order') {
     if (!keyId || !keySecret) return res.status(500).json({ error: 'Missing Razorpay server configuration' });
-    const userId = getUserIdFromSession(req);
-    if (!userId) return res.status(401).json({ error: 'Unauthenticated' });
-    const existing = await prisma.entitlement.findUnique({ where: { userId_productKey: { userId, productKey: PRODUCT_KEY_FULL } } });
+    const externalId = await getUserIdFromSession(req);
+    if (!externalId) return res.status(401).json({ error: 'Unauthenticated' });
+
+    // Auto-create user record if not yet synced from Clerk webhook
+    let user = await resolveUserInternalId(externalId);
+    if (!user) {
+      const now = new Date();
+      try {
+        user = await prisma.user.create({
+          data: {
+            id: crypto.randomUUID(),
+            clerkId: externalId.startsWith('user_') ? externalId : null,
+            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            email: `unknown_${externalId}@domain.com`,
+            role: 'USER',
+            createdAt: now,
+            updatedAt: now,
+          }
+        });
+      } catch (createErr: any) {
+        user = await resolveUserInternalId(externalId);
+        if (!user) return res.status(500).json({ error: 'Failed to initialize user record: ' + createErr?.message });
+      }
+    }
+
+    const existing = await prisma.entitlement.findUnique({
+      where: { userId_productKey: { userId: user.id, productKey: PRODUCT_KEY_FULL } }
+    });
     if (existing) return res.status(409).json({ error: 'Full course already purchased' });
     try {
       const RazorpayModule: any = await import('razorpay');
       const Razorpay = RazorpayModule.default ?? RazorpayModule;
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
-      // ...existing logic for full course order...
-      return res.status(200).json({ ok: true }); // Placeholder
+      
+      const order = await razorpay.orders.create({
+        amount: AMOUNT_PAISE_FULL,
+        currency: 'INR',
+        receipt: `receipt_fc_${externalId.slice(0, 5)}_${Date.now()}`
+      });
+      return res.status(200).json({ ok: true, orderId: order.id, keyId });
     } catch (error: any) {
       return res.status(500).json({ error: error?.message || 'Failed to create full course order' });
+    }
+  }
+
+  // PUT /api/razorpay?action=full-course-order (Verify Payment)
+  if (req.method === 'PUT' && action === 'full-course-order') {
+    if (!keySecret) return res.status(500).json({ error: 'Missing Razorpay server configuration' });
+    const externalId = await getUserIdFromSession(req);
+    if (!externalId) return res.status(401).json({ error: 'Unauthenticated' });
+    const body = await readJsonBody(req);
+    const paymentId = body.razorpay_payment_id;
+    const orderId = body.razorpay_order_id;
+    const signature = body.razorpay_signature;
+
+    if (!paymentId || !orderId || !signature) return res.status(400).json({ error: 'Missing verification fields' });
+    
+    const expected = crypto.createHmac('sha256', keySecret).update(`${orderId}|${paymentId}`).digest('hex');
+    if (expected !== signature) return res.status(400).json({ error: 'Invalid signature' });
+
+    try {
+      const now = new Date();
+      // Ensure user has a User record via Clerk or Firebase ID
+      let userRecord = await resolveUserInternalId(externalId);
+      if (!userRecord) {
+        userRecord = await prisma.user.create({
+          data: {
+            id: crypto.randomUUID(),
+            clerkId: externalId.startsWith('user_') ? externalId : null,
+            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            email: `unknown_${externalId}@domain.com`,
+            role: 'USER',
+            createdAt: now,
+            updatedAt: now,
+          }
+        });
+      }
+      
+      await prisma.entitlement.upsert({
+        where: { userId_productKey: { userId: userRecord.id, productKey: PRODUCT_KEY_FULL } },
+        create: {
+          id: crypto.randomUUID(),
+          userId: userRecord.id,
+          productKey: PRODUCT_KEY_FULL,
+          purchasedAt: now,
+        },
+        update: {},
+      });
+
+      return res.status(200).json({ ok: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: error?.message || 'Failed to verify full course order' });
     }
   }
 
   // POST /api/razorpay?action=trial-order
   if (req.method === 'POST' && action === 'trial-order') {
     if (!keyId || !keySecret) return res.status(500).json({ error: 'Missing Razorpay server configuration' });
-    const userId = getUserIdFromSession(req);
-    if (!userId) return res.status(401).json({ error: 'Unauthenticated' });
-    const existing = await prisma.entitlement.findUnique({ where: { userId_productKey: { userId, productKey: PRODUCT_KEY_TRIAL } } });
+    const externalId = await getUserIdFromSession(req);
+    if (!externalId) return res.status(401).json({ error: 'Unauthenticated' });
+
+    // Auto-create user record if not yet synced from Clerk webhook
+    let user = await resolveUserInternalId(externalId);
+    if (!user) {
+      const now = new Date();
+      try {
+        user = await prisma.user.create({
+          data: {
+            id: crypto.randomUUID(),
+            clerkId: externalId.startsWith('user_') ? externalId : null,
+            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            email: `unknown_${externalId}@domain.com`,
+            role: 'USER',
+            createdAt: now,
+            updatedAt: now,
+          }
+        });
+      } catch (createErr: any) {
+        // If create failed due to race condition, try to find again
+        user = await resolveUserInternalId(externalId);
+        if (!user) return res.status(500).json({ error: 'Failed to initialize user record: ' + createErr?.message });
+      }
+    }
+
+    const existing = await prisma.entitlement.findUnique({
+      where: { userId_productKey: { userId: user.id, productKey: PRODUCT_KEY_TRIAL } }
+    });
     if (existing) return res.status(409).json({ error: 'Trial pack already purchased' });
     try {
       const RazorpayModule: any = await import('razorpay');
       const Razorpay = RazorpayModule.default ?? RazorpayModule;
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
-      // ...existing logic for trial order...
-      return res.status(200).json({ ok: true }); // Placeholder
+      
+      const order = await razorpay.orders.create({
+        amount: AMOUNT_PAISE_TRIAL,
+        currency: 'INR',
+        receipt: `receipt_tr_${externalId.slice(0, 5)}_${Date.now()}`
+      });
+      return res.status(200).json({ ok: true, orderId: order.id, keyId });
     } catch (error: any) {
       return res.status(500).json({ error: error?.message || 'Failed to create trial order' });
+    }
+  }
+
+  // PUT /api/razorpay?action=trial-order (Verify Payment)
+  if (req.method === 'PUT' && action === 'trial-order') {
+    if (!keySecret) return res.status(500).json({ error: 'Missing Razorpay server configuration' });
+    const externalId = await getUserIdFromSession(req);
+    if (!externalId) return res.status(401).json({ error: 'Unauthenticated' });
+    const body = await readJsonBody(req);
+    const paymentId = body.razorpay_payment_id;
+    const orderId = body.razorpay_order_id;
+    const signature = body.razorpay_signature;
+
+    if (!paymentId || !orderId || !signature) return res.status(400).json({ error: 'Missing verification fields' });
+    
+    const expected = crypto.createHmac('sha256', keySecret).update(`${orderId}|${paymentId}`).digest('hex');
+    if (expected !== signature) return res.status(400).json({ error: 'Invalid signature' });
+
+    try {
+      const now = new Date();
+      let userRecord = await resolveUserInternalId(externalId);
+      if (!userRecord) {
+        userRecord = await prisma.user.create({
+          data: {
+            id: crypto.randomUUID(),
+            clerkId: externalId.startsWith('user_') ? externalId : null,
+            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            email: `unknown_${externalId}@domain.com`,
+            role: 'USER',
+            createdAt: now,
+            updatedAt: now,
+          }
+        });
+      }
+      
+      await prisma.entitlement.upsert({
+        where: { userId_productKey: { userId: userRecord.id, productKey: PRODUCT_KEY_TRIAL } },
+        create: {
+          id: crypto.randomUUID(),
+          userId: userRecord.id,
+          productKey: PRODUCT_KEY_TRIAL,
+          purchasedAt: now,
+        },
+        update: {},
+      });
+
+      return res.status(200).json({ ok: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: error?.message || 'Failed to verify trial order' });
     }
   }
 

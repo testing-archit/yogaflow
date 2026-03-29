@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Reveal } from './Reveal';
 import { RESEARCH_TOPICS } from '../constants';
 import { ResearchTopic } from '../types';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
-
+import { apiClient } from '../utils/apiClient';
 import { 
   BookOpen, 
   ExternalLink, 
@@ -13,19 +12,12 @@ import {
 } from 'lucide-react';
 
 export const Research: React.FC = () => {
-  const [researchTopics, setResearchTopics] = useState<ResearchTopic[]>(RESEARCH_TOPICS); // Initialize with constants as fallback
+  const [researchTopics, setResearchTopics] = useState<ResearchTopic[]>(RESEARCH_TOPICS);
 
   useEffect(() => {
-    const ref = collection(db, 'research');
-    const unsubscribe = onSnapshot(ref, (snapshot) => {
-      const loadedTopics: ResearchTopic[] = snapshot.docs
-        .map(doc => doc.data() as ResearchTopic)
-        .filter(topic => !(topic as any).deleted);
-      setResearchTopics(loadedTopics);
-    }, (error) => {
-      console.error('Error loading research topics:', error);
-    });
-    return () => unsubscribe();
+    apiClient.get('researchTopic').then((data: ResearchTopic[]) => {
+      if (Array.isArray(data) && data.length > 0) setResearchTopics(data);
+    }).catch(() => {/* keep constants */});
   }, []);
 
   return (

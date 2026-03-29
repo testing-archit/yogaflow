@@ -4,7 +4,7 @@ import { LoginModal, SignupModal } from './LoginModal';
 import { Reveal } from './Reveal';
 import { ASANAS, MEDITATION_TRACKS } from '../constants';
 import { Track, Asana } from '../types';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
+import { apiClient } from '../utils/apiClient';
 
 import { 
   Shield, 
@@ -82,16 +82,9 @@ export const Asanas: React.FC<AsanasProps> = ({ onNavPricing }) => {
   };
 
   useEffect(() => {
-    const ref = collection(db, 'asanas');
-    const unsubscribe = onSnapshot(ref, (snapshot) => {
-      const loadedAsanas: Asana[] = snapshot.docs
-        .map(doc => doc.data() as Asana)
-        .filter(asana => !(asana as any).deleted);
-      setAsanas(loadedAsanas);
-    }, (error) => {
-      console.error('Error loading asanas:', error);
-    });
-    return () => unsubscribe();
+    apiClient.get('asana').then((data: Asana[]) => {
+      if (Array.isArray(data) && data.length > 0) setAsanas(data);
+    }).catch(() => {/* keep constants */});
   }, []);
 
   const handleJoinWorkshop = () => {

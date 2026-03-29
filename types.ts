@@ -52,6 +52,7 @@ export interface JourneyTimelineStepSettings {
     author: string;
   };
   metrics: JourneyTimelineMetricSettings[];
+  videoUrl?: string;
 }
 
 export interface JourneySettings {

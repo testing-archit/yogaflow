@@ -5,7 +5,7 @@ import { LIVE_CLASSES, RECORDED_CLASSES } from '../constants';
 import { Clock, Play, ExternalLink, Filter, ChevronDown, Calendar, Search, X, Sparkles } from 'lucide-react';
 import { YogaClass } from '../types';
 import { getSettings } from '../utils/settings';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
+import { apiClient } from '../utils/apiClient';
 
 import { useAuth } from '../contexts/AuthContext';
 import { Lock } from 'lucide-react';
@@ -40,53 +40,35 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
   }, [initialTab]);
 
   useEffect(() => {
-    let unsubVideos: (() => void) | null = null;
-    let unsubClasses: (() => void) | null = null;
     (async () => {
       try {
         const settings = await getSettings();
         setShowComingSoon(settings.classesComingSoon);
       } catch (error) {
         console.error('Error loading settings:', error);
-        setShowComingSoon(true);
+        setShowComingSoon(false);
       }
-      const videosRef = collection(db, 'class_videos');
-      unsubVideos = onSnapshot(videosRef, (snapshot) => {
-        const map: Record<string, string> = {};
-        snapshot.docs.forEach(doc => {
-          const data = doc.data() as any;
-          if (data.classId && data.videoUrl) {
-            map[data.classId] = data.videoUrl;
-          }
-        });
-        setClassVideos(map);
-      }, (error) => {
-        console.error('Error loading class videos:', error);
-      });
-      const classesRef = collection(db, 'classes');
-      unsubClasses = onSnapshot(classesRef, (snapshot) => {
-        const allClasses = snapshot.docs
-          .map(doc => {
-            const data = doc.data() as any;
-            return {
-              id: doc.id,
-              ...data,
-              category: data.category || (data.time ? 'live' : 'recorded'),
-            } as YogaClass & { category: 'live' | 'recorded' };
-          })
-          .filter(cls => !(cls as any).deleted);
-        const live = allClasses.filter(cls => cls.category === 'live').map(({ category, ...cls }) => cls);
-        const recorded = allClasses.filter(cls => cls.category === 'recorded').map(({ category, ...cls }) => cls);
-        setLiveClasses(live);
-        setRecordedClasses(recorded);
-      }, (error) => {
-        console.error('Error loading classes:', error);
-      });
+
+      // Load class videos
+      apiClient.get('classVideo').then((videos: any[]) => {
+        if (Array.isArray(videos)) {
+          const map: Record<string, string> = {};
+          videos.forEach((v: any) => { if (v.classId && v.videoUrl) map[v.classId] = v.videoUrl; });
+          setClassVideos(map);
+        }
+      }).catch(() => {});
+
+      // Load classes
+      apiClient.get('yogaClass').then((all: any[]) => {
+        if (Array.isArray(all) && all.length > 0) {
+          const withCat = all.map((d: any) => ({ ...d, category: d.category || (d.time ? 'live' : 'recorded') }));
+          const live = withCat.filter((c: any) => c.category === 'live').map(({ category, ...c }: any) => c);
+          const recorded = withCat.filter((c: any) => c.category === 'recorded').map(({ category, ...c }: any) => c);
+          if (live.length > 0) setLiveClasses(live);
+          if (recorded.length > 0) setRecordedClasses(recorded);
+        }
+      }).catch(() => {});
     })();
-    return () => {
-      if (unsubVideos) unsubVideos();
-      if (unsubClasses) unsubClasses();
-    };
   }, []);
 
   const handleJoinJourney = () => {
@@ -426,7 +408,7 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
                   <Sparkles className="text-teal-600" size={40} />
                 </div>
                 <h2 className="text-4xl md:text-6xl font-serif font-bold text-slate-900 mb-4 md:mb-6">
-                  Classes Starting From <span className="text-teal-600 italic">15th March</span>
+                  Classes Starting From <span className="text-teal-600 italic">4th April</span>
                 </h2>
                 <p className="text-lg md:text-xl text-slate-600 max-w-md mx-auto font-light leading-relaxed">
                   We're preparing something special for you. Classes will be available soon.

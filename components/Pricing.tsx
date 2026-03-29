@@ -9,7 +9,9 @@ import { Reveal } from './Reveal';
 import { initiateRazorpayPayment, initiateRazorpaySubscription } from '../utils/razorpay';
 import { useAuth } from '../contexts/AuthContext';
 import { LoginModal, SignupModal } from './LoginModal';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
+import { useAuth as useClerkAuth } from '@clerk/react';
+import { apiClient } from '../utils/apiClient';
+import { getSettings } from '../utils/settings';
 
 
 interface PricingProps {
@@ -18,6 +20,7 @@ interface PricingProps {
 
 export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
   const { isAuthenticated, user } = useAuth();
+  const { getToken } = useClerkAuth();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const [pendingPurchase, setPendingPurchase] = useState<PricingTier | null>(null);
@@ -79,17 +82,9 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       return;
     }
 
-    const ref = doc(db, 'subscription', user.id);
-    const unsubscribe = onSnapshot(
-      ref,
-      (snap) => {
-        setUserSubscription(snap.exists() ? snap.data() : null);
-      },
-      () => {
-        setUserSubscription(null);
-      }
-    );
-    return unsubscribe;
+    apiClient.get('subscription', user.id)
+      .then((data) => setUserSubscription(data && data.id ? data : null))
+      .catch(() => setUserSubscription(null));
   }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
@@ -130,30 +125,27 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
     const currentPeriodEnd = razorpay?.currentEnd
       ? new Date(Number(razorpay.currentEnd) * 1000)
       : getCurrentPeriodEnd(tier);
-    const subscriptionRef = doc(db, 'subscription', user.id);
-    await setDoc(subscriptionRef, {
+
+    const now = new Date().toISOString();
+    await apiClient.put('subscription', user.id, {
       id: user.id,
       planType: tier.name,
       status: razorpay?.status || 'active',
-      currentPeriodEnd: Timestamp.fromDate(currentPeriodEnd),
+      currentPeriodEnd: currentPeriodEnd.toISOString(),
       paymentId: paymentResponse?.razorpay_payment_id ?? null,
       razorpaySubscriptionId: razorpay?.subscriptionId ?? paymentResponse?.razorpay_subscription_id ?? null,
       razorpayPlanId: razorpay?.planId ?? null,
-      razorpayStartAt: typeof razorpay?.startAt === 'number' ? razorpay.startAt : null,
-      razorpayChargeAt: typeof razorpay?.chargeAt === 'number' ? razorpay.chargeAt : null,
-      razorpayCurrentStart: typeof razorpay?.currentStart === 'number' ? razorpay.currentStart : null,
       planFrequency: tier.frequency ?? null,
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    }, { merge: true });
+      updatedAt: now,
+      createdAt: now,
+    });
 
-    const userRef = doc(db, 'users', user.id);
-    await setDoc(userRef, {
+    await apiClient.put('user', user.id, {
       plan: tier.name,
       planStatus: razorpay?.status || 'active',
-      planCurrentPeriodEnd: Timestamp.fromDate(currentPeriodEnd),
-      planUpdatedAt: serverTimestamp(),
-    }, { merge: true });
+      planCurrentPeriodEnd: currentPeriodEnd.toISOString(),
+      planUpdatedAt: now,
+    });
   };
 
   const handlePaymentSuccess = (tier: PricingTier, response: any) => {
@@ -191,9 +183,13 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
     }
 
     try {
+      const token = await getToken();
       const resp = await fetch('/api/razorpay/create-subscription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({
           planId: MONTHLY_PLAN_ID,
           userId: user.id,
@@ -207,8 +203,9 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       if (!resp.ok) {
         throw new Error(data?.error || `Failed to create subscription (${resp.status})`);
       }
-      if (!data?.subscriptionId || typeof data.subscriptionId !== 'string') {
-        throw new Error(`Failed to create subscription (${resp.status})`);
+      const subscriptionId = data?.subscription?.id || data?.subscriptionId;
+      if (!subscriptionId || typeof subscriptionId !== 'string') {
+        throw new Error(`Failed to create subscription: missing subscription id`);
       }
       const checkoutKeyId =
         (typeof data?.keyId === 'string' && data.keyId.trim()) ? data.keyId.trim() : await ensureRazorpayKeyId();
@@ -217,14 +214,18 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       }
 
       initiateRazorpaySubscription(
-        data.subscriptionId,
+        subscriptionId,
         tier.name,
         tier.frequency,
         async (response) => {
           try {
+            const token = await getToken();
             const verifyResp = await fetch('/api/razorpay/verify-subscription', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                 'Authorization': `Bearer ${token}`
+              },
               body: JSON.stringify(response),
             });
             const verified: any = await readJson(verifyResp);
@@ -311,23 +312,16 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
   }, []);
 
   useEffect(() => {
-    const settingsRef = doc(db, 'settings', 'app_settings');
-    const unsubscribe = onSnapshot(
-      settingsRef,
-      (snap) => {
-        const data = snap.data() as any;
-        if (data?.pricingTiersINR && Array.isArray(data.pricingTiersINR) && data.pricingTiersINR.length > 0) {
-          setPricingTiersINR(data.pricingTiersINR as PricingTier[]);
-        }
-        if (data?.pricingTiersUSD && Array.isArray(data.pricingTiersUSD) && data.pricingTiersUSD.length > 0) {
-          setPricingTiersUSD(data.pricingTiersUSD as PricingTier[]);
-        }
-      },
-      (error) => {
-        console.error('Error listening to pricing settings:', error);
+    getSettings().then((settings) => {
+      if (settings.pricingTiersINR && Array.isArray(settings.pricingTiersINR) && settings.pricingTiersINR.length > 0) {
+        setPricingTiersINR(settings.pricingTiersINR as PricingTier[]);
       }
-    );
-    return unsubscribe;
+      if (settings.pricingTiersUSD && Array.isArray(settings.pricingTiersUSD) && settings.pricingTiersUSD.length > 0) {
+        setPricingTiersUSD(settings.pricingTiersUSD as PricingTier[]);
+      }
+    }).catch((error) => {
+      console.error('Error loading pricing settings:', error);
+    });
   }, []);
 
   const currentPricingTiers = isIndia ? pricingTiersINR : pricingTiersUSD;
@@ -419,7 +413,11 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
     if (isTrialTier(tier)) {
       if (hasTrialEntitlement) return;
       try {
-        const resp = await fetch('/api/razorpay/trial-order', { method: 'POST' });
+        const token = await getToken();
+        const resp = await fetch('/api/razorpay/trial-order', { 
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         const data: any = await readJson(resp);
         if (!resp.ok) throw new Error(data?.error || `Failed to create trial order (${resp.status})`);
         const keyId = (typeof data?.keyId === 'string' && data.keyId.trim()) ? data.keyId.trim() : await ensureRazorpayKeyId();
@@ -433,9 +431,13 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
           tier.frequency,
           async (response) => {
             try {
+              const token = await getToken();
               const verifyResp = await fetch('/api/razorpay/trial-order', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}` 
+                },
                 body: JSON.stringify(response),
               });
               const verified: any = await readJson(verifyResp);
@@ -468,7 +470,11 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
     if (isFullCourseTier) {
       if (hasFullCourse) return;
       try {
-        const resp = await fetch('/api/razorpay/full-course-order', { method: 'POST' });
+        const token = await getToken();
+        const resp = await fetch('/api/razorpay/full-course-order', { 
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         const data: any = await readJson(resp);
         if (!resp.ok) throw new Error(data?.error || `Failed to create order (${resp.status})`);
         const keyId = (typeof data?.keyId === 'string' && data.keyId.trim()) ? data.keyId.trim() : await ensureRazorpayKeyId();
@@ -482,9 +488,13 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
           tier.frequency,
           async (response) => {
             try {
+              const token = await getToken();
               const verifyResp = await fetch('/api/razorpay/full-course-order', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}` 
+                },
                 body: JSON.stringify(response),
               });
               const verified: any = await readJson(verifyResp);

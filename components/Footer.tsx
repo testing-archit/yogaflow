@@ -9,7 +9,7 @@ import {
   X
 } from 'lucide-react';
 import { LOGO_URL } from '../constants';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
+import { apiClient } from '../utils/apiClient';
 
 
 interface FooterProps {
@@ -71,11 +71,11 @@ export const Footer: React.FC<FooterProps> = ({ onNavHome, onNavInstructors, onN
     setErrorMessage('');
 
     try {
-      // Save email to Firestore
-      await addDoc(collection(db, 'newsletter_subscribers'), {
+      await apiClient.post('newsletterSubscriber', {
+        id: crypto.randomUUID(),
         email: newsletterEmail.toLowerCase().trim(),
-        subscribedAt: serverTimestamp(),
-        source: 'website_footer'
+        isActive: true,
+        createdAt: new Date().toISOString(),
       });
 
       setSubmitStatus('success');

@@ -1,16 +1,27 @@
-const getHeaders = async () => {
-  // Use mock local storage token instead of firebase
-  let token = '';
+// Get Clerk JWT token for authenticated requests
+const getToken = async (): Promise<string> => {
   try {
-    const userStr = localStorage.getItem('yogaFlowUser');
-    if (userStr) token = JSON.parse(userStr).email; // simple mock token
+    // @clerk/react exposes the Clerk instance on window after initialization
+    const clerk = (window as any).Clerk;
+    if (clerk?.session) {
+      const token = await clerk.session.getToken();
+      if (token) return token;
+    }
   } catch (e) {}
-
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  return '';
 };
+
+const getHeaders = async (isPublic = false): Promise<Record<string, string>> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (!isPublic) {
+    const token = await getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+};
+
+// Public tables that don't require auth for reads
+const PUBLIC_TABLES = ['asana', 'instructor', 'yogaClass', 'researchTopic', 'appSetting', 'classVideo'];
 
 export const apiClient = {
   get: async (table: string, id?: string, options?: { filters?: any, orderBy?: string, orderDir?: 'asc' | 'desc' }) => {
@@ -20,7 +31,8 @@ export const apiClient = {
     if (options?.orderBy) url += `&orderBy=${options.orderBy}`;
     if (options?.orderDir) url += `&orderDir=${options.orderDir}`;
 
-    const res = await fetch(url, { headers: await getHeaders() });
+    const isPublic = PUBLIC_TABLES.includes(table);
+    const res = await fetch(url, { headers: await getHeaders(isPublic) });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },

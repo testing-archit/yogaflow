@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model AppSetting {
@@ -103,6 +104,7 @@ model Subscription {
 
 model User {
   id                    String                  @id
+  clerkId               String?                 @unique
   firebaseId            String?                 @unique
   email                 String                  @unique
   name                  String?

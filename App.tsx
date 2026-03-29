@@ -4,7 +4,7 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { AuthProvider } from './contexts/AuthContext';
 
-const lazyNamed = <T,>(factory: () => Promise<any>, exportName: string) =>
+const lazyNamed = <T extends React.ComponentType<any>>(factory: () => Promise<any>, exportName: string) =>
   React.lazy(async () => {
     const mod = await factory();
     return { default: mod[exportName] as T };
@@ -230,24 +230,37 @@ const AppContent: React.FC = () => {
 
             <div className="py-24 bg-slate-50">
               <div className="max-w-7xl mx-auto px-6 text-center">
-                <h2 className="text-4xl font-serif font-bold mb-6">Explore the Path</h2>
-                <p className="text-slate-500 mb-10 max-w-2xl mx-auto">Master the foundational postures and understand the clinical research behind every movement.</p>
-                <div className="flex flex-col sm:flex-row justify-center gap-6">
+                <h2 className="text-4xl font-serif font-bold mb-3">Explore Everything</h2>
+                <p className="text-slate-500 mb-12 max-w-2xl mx-auto">Connect with your tribe, deepen your practice, and understand the science behind every movement.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
+                  <button
+                    onClick={handleNavCommunity}
+                    className="bg-teal-600 text-white px-8 py-5 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-teal-700 transition-all shadow-xl hover:scale-105 active:scale-95"
+                  >
+                    Community Portal
+                  </button>
+                  <button
+                    onClick={handleNavMeditation}
+                    className="bg-white text-teal-600 border border-teal-200 px-8 py-5 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-teal-50 transition-all shadow-xl hover:scale-105 active:scale-95"
+                  >
+                    Meditation Music
+                  </button>
                   <button
                     onClick={handleNavAsanas}
-                    className="bg-teal-600 text-white px-10 py-4 rounded-full font-bold uppercase tracking-widest text-xs hover:bg-teal-700 transition-all shadow-xl"
+                    className="bg-slate-900 text-white px-8 py-5 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-slate-800 transition-all shadow-xl hover:scale-105 active:scale-95"
                   >
-                    Browse Asana Library
+                    Asana Library
                   </button>
                   <button
                     onClick={handleNavResearch}
-                    className="bg-white text-teal-600 border border-teal-200 px-10 py-4 rounded-full font-bold uppercase tracking-widest text-xs hover:bg-teal-50 transition-all shadow-xl"
+                    className="bg-white text-slate-700 border border-slate-200 px-8 py-5 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all shadow-xl hover:scale-105 active:scale-95"
                   >
-                    View Scientific Research
+                    Research & Science
                   </button>
                 </div>
               </div>
             </div>
+
 
             <Suspense fallback={null}>
               <Contact />
