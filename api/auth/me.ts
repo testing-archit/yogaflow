@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClerkClient } from '@clerk/backend';
-import { prisma } from '../../utils/prisma';
+import { prisma } from '../../utils/prisma.js';
 import crypto from 'crypto';
 
 const clerkClient = createClerkClient({

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../../utils/prisma';
+import { prisma } from '../../utils/prisma.js';
 
 function getBaseUrl(req: VercelRequest) {
   const protoHeader = req.headers['x-forwarded-proto'];

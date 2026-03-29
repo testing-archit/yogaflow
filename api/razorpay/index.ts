@@ -1,7 +1,7 @@
 // Use generic types for Vercel compatibility
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../../utils/prisma';
+import { prisma } from '../../utils/prisma.js';
 import { createClerkClient } from '@clerk/backend';
 import Razorpay from 'razorpay';
 
