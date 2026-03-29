@@ -46,7 +46,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
   const ensureRazorpayKeyId = async (): Promise<string> => {
     if (razorpayKeyId) return razorpayKeyId;
     try {
-      const r = await fetch('/api/razorpay/key-id');
+      const r = await fetch('/api/razorpay?action=key-id');
       const j: any = await readJson(r);
       const key = typeof j?.keyId === 'string' ? j.keyId.trim() : '';
       if (r.ok && key) {
@@ -63,7 +63,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       setRazorpayKeyId(envKeyId);
       return;
     }
-    fetch('/api/razorpay/key-id')
+    fetch('/api/razorpay?action=key-id')
       .then(async (r) => ({ ok: r.ok, j: await readJson(r) }))
       .then(({ ok, j }) => {
         if (!ok) return;
@@ -184,7 +184,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
 
     try {
       const token = await getToken();
-      const resp = await fetch('/api/razorpay/create-subscription', {
+      const resp = await fetch('/api/razorpay?action=create-subscription', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -220,7 +220,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
         async (response) => {
           try {
             const token = await getToken();
-            const verifyResp = await fetch('/api/razorpay/verify-subscription', {
+            const verifyResp = await fetch('/api/razorpay?action=verify-subscription', {
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
@@ -414,7 +414,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       if (hasTrialEntitlement) return;
       try {
         const token = await getToken();
-        const resp = await fetch('/api/razorpay/trial-order', { 
+        const resp = await fetch('/api/razorpay?action=trial-order', { 
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -432,7 +432,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
           async (response) => {
             try {
               const token = await getToken();
-              const verifyResp = await fetch('/api/razorpay/trial-order', {
+              const verifyResp = await fetch('/api/razorpay?action=trial-order', {
                 method: 'PUT',
                 headers: { 
                   'Content-Type': 'application/json',
@@ -471,7 +471,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       if (hasFullCourse) return;
       try {
         const token = await getToken();
-        const resp = await fetch('/api/razorpay/full-course-order', { 
+        const resp = await fetch('/api/razorpay?action=full-course-order', { 
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -489,7 +489,7 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
           async (response) => {
             try {
               const token = await getToken();
-              const verifyResp = await fetch('/api/razorpay/full-course-order', {
+              const verifyResp = await fetch('/api/razorpay?action=full-course-order', {
                 method: 'PUT',
                 headers: { 
                   'Content-Type': 'application/json',

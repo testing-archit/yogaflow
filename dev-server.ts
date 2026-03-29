@@ -61,11 +61,9 @@ async function startServer() {
   const fullCourseEntHandler = await import('./api/entitlements/full-course.js');
   app.all('/api/entitlements/full-course', makeHandler(fullCourseEntHandler));
 
-  // Razorpay routes - inject {action} via Proxy (Express 5: req.query is read-only)
-  const razorpayHandler = await import('./api/razorpay/[action].js');
-  app.all('/api/razorpay/:action', (req, res) => {
-    makeHandler(razorpayHandler)(withQuery(req, { action: req.params.action }), res);
-  });
+  // Razorpay routes
+  const razorpayHandler = await import('./api/razorpay/index.js');
+  app.all('/api/razorpay', makeHandler(razorpayHandler));
 
   // CRUD routes
   const crudHandler = await import('./api/crud/index.js');

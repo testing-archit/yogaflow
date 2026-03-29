@@ -87,7 +87,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
         const subId = subscription?.razorpaySubscriptionId;
         if (!user?.id || !subId || typeof subId !== 'string') return;
 
-        fetch(`/api/razorpay/fetch-subscription?subscriptionId=${encodeURIComponent(subId)}`)
+        fetch(`/api/razorpay?action=fetch-subscription&subscriptionId=${encodeURIComponent(subId)}`)
             .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
             .then(async ({ ok, j }) => {
                 if (!ok) return;
@@ -142,7 +142,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
 
         setIsCancellingSubscription(true);
         try {
-            const resp = await fetch('/api/razorpay/cancel-subscription', {
+            const resp = await fetch('/api/razorpay?action=cancel-subscription', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ subscriptionId: subId, cancelAtCycleEnd: true }),
