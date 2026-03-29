@@ -1,12 +1,14 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": null,
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@5"
+    }
+  },
   "rewrites": [
-    { "source": "/api/auth/me", "destination": "/api/auth/me" },
-    { "source": "/api/entitlements/trial", "destination": "/api/entitlements/trial" },
-    { "source": "/api/entitlements/full-course", "destination": "/api/entitlements/full-course" },
-    { "source": "/api/razorpay/:action", "destination": "/api/razorpay/[action]" },
-    { "source": "/api/crud/:table", "destination": "/api/crud" },
-    { "source": "/api/crud/:table/:id", "destination": "/api/crud" },
-    { "source": "/api/webhooks/clerk", "destination": "/api/webhooks/clerk" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

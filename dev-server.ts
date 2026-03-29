@@ -68,7 +68,7 @@ async function startServer() {
   });
 
   // CRUD routes
-  const crudHandler = await import('./api/crud.js');
+  const crudHandler = await import('./api/crud/index.js');
   app.all('/api/crud/:table', (req, res) => {
     makeHandler(crudHandler)(withQuery(req, { table: req.params.table }), res);
   });
