@@ -61,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       // Upsert user into Neon via Prisma
-      const user = await (prisma.user as any).upsert({
+      const user = await prisma.user.upsert({
         where: { clerkId: id },
         update: {
           email,

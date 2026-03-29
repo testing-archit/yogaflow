@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Find the user in Neon by clerkId
-    const user = await (prisma.user as any).findUnique({
+    const user = await prisma.user.findUnique({
       where: { clerkId: userId }
     });
 
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const name = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
 
       if (email) {
-        const newUser = await (prisma.user as any).upsert({
+        const newUser = await prisma.user.upsert({
           where: { clerkId: userId },
           update: { email, name: name || undefined },
           create: {
