@@ -10,7 +10,7 @@
     "dev": "concurrently \"tsx dev-server.ts\" \"vite\" --kill-others-on-fail",
     "dev:vite": "vite",
     "dev:api": "tsx dev-server.ts",
-    "build": "vite build",
+    "build": "prisma generate && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
