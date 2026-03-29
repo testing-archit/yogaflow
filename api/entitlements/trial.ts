@@ -3,7 +3,10 @@ import { createClerkClient } from '@clerk/backend';
 import { prisma } from '../../utils/prisma';
 
 const PRODUCT_KEY = 'TRIAL_SEVEN_DAY_FLOW';
-const clerkClient = createClerkClient({ secretKey: (process.env.CLERK_SECRET_KEY || '').trim() });
+const clerkClient = createClerkClient({
+  secretKey: (process.env.CLERK_SECRET_KEY || '').trim(),
+  publishableKey: (process.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim(),
+});
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });

@@ -2,8 +2,13 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import fs from 'fs';
 
-dotenv.config();
+// Load .env first, then .env.local (local overrides)
+dotenv.config({ path: '.env' });
+if (fs.existsSync('.env.local')) {
+  dotenv.config({ path: '.env.local', override: true });
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -12,7 +17,21 @@ const PORT = 3001;
 app.use(express.json());
 app.use(express.raw({ type: '*/*', limit: '10mb' }));
 
-// Helper to wrap Vercel-style handlers into Express
+// Helper to wrap Vercel-style handlers into Express.
+// Express 5 made req.query a read-only getter, so we use a Proxy
+// to inject extra query params (e.g. {action}, {table}) without mutating req.
+function withQuery(req: express.Request, extra: Record<string, string>): any {
+  return new Proxy(req, {
+    get(target: any, prop: string | symbol) {
+      if (prop === 'query') {
+        return { ...target.query, ...extra };
+      }
+      const val = target[prop];
+      return typeof val === 'function' ? val.bind(target) : val;
+    },
+  });
+}
+
 function makeHandler(handlerModule: any) {
   return async (req: express.Request, res: express.Response) => {
     const handler = handlerModule.default;
@@ -42,25 +61,19 @@ async function startServer() {
   const fullCourseEntHandler = await import('./api/entitlements/full-course.js');
   app.all('/api/entitlements/full-course', makeHandler(fullCourseEntHandler));
 
-  // Razorpay routes - map action-based routes
+  // Razorpay routes - inject {action} via Proxy (Express 5: req.query is read-only)
   const razorpayHandler = await import('./api/razorpay/[action].js');
-  
-  // All razorpay routes redirect to the action handler with proper query params
   app.all('/api/razorpay/:action', (req, res) => {
-    // inject {action} into req.query to match Vercel's dynamic routing
-    (req as any).query = { ...req.query, action: req.params.action };
-    makeHandler(razorpayHandler)(req, res);
+    makeHandler(razorpayHandler)(withQuery(req, { action: req.params.action }), res);
   });
 
   // CRUD routes
   const crudHandler = await import('./api/crud.js');
   app.all('/api/crud/:table', (req, res) => {
-    (req as any).query = { ...req.query, table: req.params.table };
-    makeHandler(crudHandler)(req, res);
+    makeHandler(crudHandler)(withQuery(req, { table: req.params.table }), res);
   });
   app.all('/api/crud/:table/:id', (req, res) => {
-    (req as any).query = { ...req.query, table: req.params.table, id: req.params.id };
-    makeHandler(crudHandler)(req, res);
+    makeHandler(crudHandler)(withQuery(req, { table: req.params.table, id: req.params.id }), res);
   });
 
   // Webhook routes

@@ -2,7 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClerkClient } from '@clerk/backend';
 import { prisma } from '../utils/prisma';
 
-const clerkClient = createClerkClient({ secretKey: (process.env.CLERK_SECRET_KEY || '').trim() });
+const clerkClient = createClerkClient({
+  secretKey: (process.env.CLERK_SECRET_KEY || '').trim(),
+  publishableKey: (process.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim(),
+});
 
 // Utility to parse JSON
 const parseBody = (body: any) => (typeof body === 'string' ? JSON.parse(body) : body);

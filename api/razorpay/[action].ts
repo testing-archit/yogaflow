@@ -24,7 +24,10 @@ async function getUserIdFromSession(req: any) {
   }
 
   try {
-    const clerkClient = createClerkClient({ secretKey: clerkSecretKey.trim() });
+    const clerkClient = createClerkClient({
+      secretKey: clerkSecretKey.trim(),
+      publishableKey: (process.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim(),
+    });
 
     // Build a proper Request object so Clerk can inspect headers (incl. Authorization Bearer)
     const authHeader = req.headers?.authorization || '';
