@@ -77,7 +77,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email,
         name,
         avatarUrl: payload.picture,
-        firebaseId: email, // kept for compatibility
         updatedAt: new Date(),
       },
     });

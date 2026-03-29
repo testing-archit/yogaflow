@@ -64,12 +64,7 @@ async function getUserIdFromSession(req: any) {
 
 async function resolveUserInternalId(externalId: string) {
   const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { clerkId: externalId },
-        { firebaseId: externalId }
-      ]
-    }
+    where: { clerkId: externalId }
   });
   return user;
 }
@@ -211,13 +206,13 @@ export default async function handler(req: any, res: any) {
       const subscriptionId = typeof entity?.id === 'string' ? entity.id : undefined;
       const currentEnd = typeof entity?.current_end === 'number' ? new Date(entity.current_end * 1000) : undefined;
       const now = new Date();
-      // Ensure user exists first
-      let userRecord = await prisma.user.findUnique({ where: { firebaseId: userId } });
+      // Ensure user exists first (lookup by Clerk ID only)
+      let userRecord = await prisma.user.findFirst({ where: { clerkId: userId } });
       if (!userRecord) {
         userRecord = await prisma.user.create({
           data: {
             id: crypto.randomUUID(),
-            firebaseId: userId,
+            clerkId: userId,
             email: entity?.notes?.email || `unknown_${userId}@domain.com`,
             name: entity?.notes?.name || null,
             createdAt: now,
@@ -251,8 +246,7 @@ export default async function handler(req: any, res: any) {
         user = await prisma.user.create({
           data: {
             id: crypto.randomUUID(),
-            clerkId: externalId.startsWith('user_') ? externalId : null,
-            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            clerkId: externalId,
             email: `unknown_${externalId}@domain.com`,
             role: 'USER',
             createdAt: now,
@@ -302,14 +296,13 @@ export default async function handler(req: any, res: any) {
 
     try {
       const now = new Date();
-      // Ensure user has a User record via Clerk or Firebase ID
+      // Ensure user has a User record (Clerk only)
       let userRecord = await resolveUserInternalId(externalId);
       if (!userRecord) {
         userRecord = await prisma.user.create({
           data: {
             id: crypto.randomUUID(),
-            clerkId: externalId.startsWith('user_') ? externalId : null,
-            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            clerkId: externalId,
             email: `unknown_${externalId}@domain.com`,
             role: 'USER',
             createdAt: now,
@@ -349,8 +342,7 @@ export default async function handler(req: any, res: any) {
         user = await prisma.user.create({
           data: {
             id: crypto.randomUUID(),
-            clerkId: externalId.startsWith('user_') ? externalId : null,
-            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            clerkId: externalId,
             email: `unknown_${externalId}@domain.com`,
             role: 'USER',
             createdAt: now,
@@ -406,8 +398,7 @@ export default async function handler(req: any, res: any) {
         userRecord = await prisma.user.create({
           data: {
             id: crypto.randomUUID(),
-            clerkId: externalId.startsWith('user_') ? externalId : null,
-            firebaseId: externalId.startsWith('user_') ? null : externalId,
+            clerkId: externalId,
             email: `unknown_${externalId}@domain.com`,
             role: 'USER',
             createdAt: now,

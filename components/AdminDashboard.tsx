@@ -526,7 +526,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const setUserAdmin = async (target: UserData, makeAdmin: boolean) => {
     if (target.source !== 'firebase') {
-      alert('This user is from localStorage and cannot be updated in Firestore.');
+      alert('This user record cannot be updated.');
       return;
     }
 
@@ -1002,7 +1002,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const openCreateCommunityGroup = () => {
     if (!auth.currentUser) {
-      alert('Please sign in with Google/Firebase to manage community groups.');
+      alert('You must be logged in as an admin to manage community groups.');
       setIsLoginModalOpen(true);
       return;
     }
@@ -1012,7 +1012,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const openEditCommunityGroup = (conversationId: string) => {
     if (!auth.currentUser) {
-      alert('Please sign in with Google/Firebase to manage community groups.');
+      alert('You must be logged in as an admin to manage community groups.');
       setIsLoginModalOpen(true);
       return;
     }
@@ -1027,7 +1027,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const saveCommunityGroupFromModal = async () => {
     if (!auth.currentUser) {
-      alert('Please sign in with Google/Firebase to manage community groups.');
+      alert('You must be logged in as an admin to manage community groups.');
       setIsLoginModalOpen(true);
       return;
     }
@@ -1124,7 +1124,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const handleSaveCommunity = async () => {
     try {
       if (!auth.currentUser) {
-        alert('Please sign in with Google/Firebase to manage community groups.');
+        alert('You must be logged in as an admin to manage community groups.');
         setIsLoginModalOpen(true);
         return;
       }
@@ -1310,7 +1310,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       console.error('❌ Error saving class:', error);
       let errorMessage = 'Failed to save class. ';
       if (error.code === 'permission-denied') {
-        errorMessage += 'Permission denied. Please check Firestore security rules are deployed.';
+        errorMessage += 'Permission denied. Please check database permissions.';
       } else if (error.message) {
         errorMessage += error.message;
       } else {
@@ -1392,14 +1392,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       
       let errorMessage = 'Failed to save asana. ';
       if (error.message?.includes('timed out')) {
-        errorMessage += 'Request timed out. This might be a network issue or Firestore database configuration problem. ';
-        errorMessage += 'Please check: 1) Your internet connection, 2) Firebase Console to ensure Firestore is enabled, 3) Browser console for more details.';
+        errorMessage += 'Request timed out. This might be a network issue or database configuration problem. ';
+        errorMessage += 'Please check: 1) Your internet connection, 2) database server is reachable, 3) Browser console for more details.';
       } else if (error.code === 'permission-denied') {
-        errorMessage += 'Permission denied. Please check Firestore security rules are deployed.';
+        errorMessage += 'Permission denied. Please check database permissions.';
       } else if (error.code === 'unavailable') {
-        errorMessage += 'Service unavailable. Please check your internet connection and Firebase project status.';
+        errorMessage += 'Service unavailable. Please check your internet connection and server status.';
       } else if (error.code === 'failed-precondition') {
-        errorMessage += 'Database error. Please check Firebase Console to ensure Firestore is in Native mode (not Datastore mode).';
+        errorMessage += 'Database error. Please check database configuration.';
       } else if (error.message) {
         errorMessage += error.message;
       } else {
@@ -1486,14 +1486,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       
       let errorMessage = 'Failed to save instructor. ';
       if (error.message?.includes('timed out')) {
-        errorMessage += 'Request timed out. This might be a network issue or Firestore database configuration problem. ';
-        errorMessage += 'Please check: 1) Your internet connection, 2) Firebase Console to ensure Firestore is enabled, 3) Browser console for more details.';
+        errorMessage += 'Request timed out. This might be a network issue or database configuration problem. ';
+        errorMessage += 'Please check: 1) Your internet connection, 2) database server is reachable, 3) Browser console for more details.';
       } else if (error.code === 'permission-denied') {
-        errorMessage += 'Permission denied. Please check Firestore security rules are deployed.';
+        errorMessage += 'Permission denied. Please check database permissions.';
       } else if (error.code === 'unavailable') {
-        errorMessage += 'Service unavailable. Please check your internet connection and Firebase project status.';
+        errorMessage += 'Service unavailable. Please check your internet connection and server status.';
       } else if (error.code === 'failed-precondition') {
-        errorMessage += 'Database error. Please check Firebase Console to ensure Firestore is in Native mode (not Datastore mode).';
+        errorMessage += 'Database error. Please check database configuration.';
       } else if (error.message) {
         errorMessage += error.message;
       } else {

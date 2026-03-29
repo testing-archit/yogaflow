@@ -28,9 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Find internal user ID
     const user = await prisma.user.findFirst({
-      where: {
-        OR: [{ clerkId: userId }, { firebaseId: userId }]
-      }
+      where: { clerkId: userId },
     });
 
     if (!user) return res.status(200).json({ productKey: PRODUCT_KEY, hasPurchased: false });
