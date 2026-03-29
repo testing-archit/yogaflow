@@ -2,6 +2,8 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../utils/prisma';
+import { createClerkClient } from '@clerk/backend';
+import Razorpay from 'razorpay';
 
 const PRODUCT_KEY_FULL = 'FULL_COURSE_6_MONTHS';
 const PRODUCT_KEY_TRIAL = 'TRIAL_SEVEN_DAY_FLOW';
@@ -13,8 +15,6 @@ function getCookieValue(cookieHeader: string | undefined, name: string) {
   const matched = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
   return matched?.[1];
 }
-
-import { createClerkClient } from '@clerk/backend';
 
 async function getUserIdFromSession(req: any) {
   const clerkSecretKey = (process.env.CLERK_SECRET_KEY || '').trim();
@@ -107,8 +107,7 @@ export default async function handler(req: any, res: any) {
     const subscriptionId = typeof req.query?.subscriptionId === 'string' ? req.query.subscriptionId : '';
     if (!subscriptionId) return res.status(400).json({ error: 'Missing subscriptionId' });
     try {
-      const RazorpayModule: any = await import('razorpay');
-      const Razorpay = RazorpayModule.default ?? RazorpayModule;
+
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
       const subscription = await razorpay.subscriptions.fetch(subscriptionId);
       return res.status(200).json({ subscription });
@@ -131,8 +130,7 @@ export default async function handler(req: any, res: any) {
     const totalCountRaw = Number(body.totalCount);
     const totalCount = Number.isFinite(totalCountRaw) && totalCountRaw > 0 ? totalCountRaw : 24;
     try {
-      const RazorpayModule: any = await import('razorpay');
-      const Razorpay = RazorpayModule.default ?? RazorpayModule;
+
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
       const payload: any = {
         plan_id: planId,
@@ -156,8 +154,7 @@ export default async function handler(req: any, res: any) {
     const cancelAtCycleEnd = body.cancelAtCycleEnd === false ? false : true;
     if (!subscriptionId) return res.status(400).json({ error: 'Missing subscriptionId' });
     try {
-      const RazorpayModule: any = await import('razorpay');
-      const Razorpay = RazorpayModule.default ?? RazorpayModule;
+
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
       const subscription = await razorpay.subscriptions.cancel(subscriptionId, cancelAtCycleEnd);
       return res.status(200).json({ ok: true, subscription });
@@ -177,8 +174,7 @@ export default async function handler(req: any, res: any) {
     const expected = crypto.createHmac('sha256', keySecret).update(`${paymentId}|${subscriptionId}`).digest('hex');
     if (expected !== signature) return res.status(400).json({ error: 'Invalid signature' });
     try {
-      const RazorpayModule: any = await import('razorpay');
-      const Razorpay = RazorpayModule.default ?? RazorpayModule;
+
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
       const subscription = await razorpay.subscriptions.fetch(subscriptionId);
       return res.status(200).json({ ok: true, subscription });
@@ -264,8 +260,7 @@ export default async function handler(req: any, res: any) {
     });
     if (existing) return res.status(409).json({ error: 'Full course already purchased' });
     try {
-      const RazorpayModule: any = await import('razorpay');
-      const Razorpay = RazorpayModule.default ?? RazorpayModule;
+
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
       
       const order = await razorpay.orders.create({
@@ -361,8 +356,7 @@ export default async function handler(req: any, res: any) {
     });
     if (existing) return res.status(409).json({ error: 'Trial pack already purchased' });
     try {
-      const RazorpayModule: any = await import('razorpay');
-      const Razorpay = RazorpayModule.default ?? RazorpayModule;
+
       const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
       
       const order = await razorpay.orders.create({
