@@ -1,0 +1,6 @@
+> [debug] [2026-03-29T18:50:55.406Z] Found config in file "/Users/archit/yogaflow/yogafloww/vercel.json"
+> [debug] [2026-03-29T18:50:55.411Z] Vercel CLI 50.37.3
+> [debug] [2026-03-29T18:50:55.417Z] Agent/TTY/nonInteractive: isAgent=true agentName=antigravity stdin.isTTY=true --non-interactive=false explicitFalse=false => nonInteractive=false
+> [debug] [2026-03-29T18:50:55.419Z] user supplied known subcommand: "build"
+? No Project Settings found locally. Run `vercel pull` for retrieving them?
+(Y/n)[1A[83G
