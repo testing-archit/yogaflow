@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './Button';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage, Timestamp } from '../utils/mockFirebase';
 
 import {
     User,
@@ -27,7 +26,7 @@ interface UserDashboardProps {
 type TabType = 'profile' | 'asanas' | 'classes' | 'subscription';
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab = 'profile', onNavAdmin }) => {
-    const { user, logout, isAdmin, isAdminChecking } = useAuth();
+    const { user, logout, isAdmin, isAdminChecking, getToken } = useAuth();
     const [activeTab, setActiveTab] = useState<TabType>(initialTab);
     const [subscription, setSubscription] = useState<any | null>(null);
     const [subscriptionLoading, setSubscriptionLoading] = useState(false);
@@ -61,62 +60,27 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
             return;
         }
 
-        setSubscriptionLoading(true);
-        setSubscriptionError(null);
-
-        const ref = doc(db, 'subscription', user.id);
-        const unsubscribe = onSnapshot(
-            ref,
-            (snap) => {
-                setSubscription(snap.exists() ? snap.data() : null);
-                setSubscriptionLoading(false);
-            },
-            (error) => {
+        const fetchSubscription = async () => {
+            setSubscriptionLoading(true);
+            setSubscriptionError(null);
+            try {
+                const token = await getToken();
+                const res = await fetch('/api/subscriptions', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Failed to load subscription');
+                const data = await res.json();
+                setSubscription(data);
+            } catch (error: any) {
                 console.error('Error loading subscription:', error);
-                setSubscription(null);
-                setSubscriptionLoading(false);
                 setSubscriptionError(error?.message || 'Failed to load subscription.');
+            } finally {
+                setSubscriptionLoading(false);
             }
-        );
+        };
 
-        return () => unsubscribe();
-    }, [activeTab, user?.id]);
-
-    useEffect(() => {
-        if (activeTab !== 'subscription') return;
-        const subId = subscription?.razorpaySubscriptionId;
-        if (!user?.id || !subId || typeof subId !== 'string') return;
-
-        fetch(`/api/razorpay?action=fetch-subscription&subscriptionId=${encodeURIComponent(subId)}`)
-            .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
-            .then(async ({ ok, j }) => {
-                if (!ok) return;
-                const sub = j?.subscription;
-                if (!sub) return;
-
-                const currentEnd = typeof sub.current_end === 'number' ? sub.current_end : null;
-                const currentStart = typeof sub.current_start === 'number' ? sub.current_start : null;
-                const chargeAt = typeof sub.charge_at === 'number' ? sub.charge_at : null;
-                const startAt = typeof sub.start_at === 'number' ? sub.start_at : null;
-                const status = typeof sub.status === 'string' ? sub.status : null;
-                const planId = typeof sub.plan_id === 'string' ? sub.plan_id : null;
-
-                await setDoc(
-                    doc(db, 'subscription', user.id),
-                    {
-                        status: status || undefined,
-                        razorpayPlanId: planId || undefined,
-                        razorpayCurrentStart: currentStart,
-                        razorpayChargeAt: chargeAt,
-                        razorpayStartAt: startAt,
-                        currentPeriodEnd: currentEnd ? Timestamp.fromDate(new Date(currentEnd * 1000)) : undefined,
-                        updatedAt: serverTimestamp(),
-                    },
-                    { merge: true }
-                );
-            })
-            .catch(() => {});
-    }, [activeTab, subscription?.razorpaySubscriptionId, user?.id]);
+        fetchSubscription();
+    }, [activeTab, user?.id, getToken]);
 
     const handleLogout = () => {
         logout();
@@ -134,7 +98,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
     };
 
     const cancelSubscription = async () => {
-        const subId = subscription?.razorpaySubscriptionId;
+        const subId = subscription?.razorpaySubId || subscription?.razorpaySubscriptionId;
         if (!user?.id || !subId || typeof subId !== 'string') return;
         if (isCancellingSubscription) return;
         const ok = window.confirm('Cancel your subscription at the end of the current billing period?');
@@ -142,6 +106,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
 
         setIsCancellingSubscription(true);
         try {
+            const token = await getToken();
             const resp = await fetch('/api/razorpay?action=cancel-subscription', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -151,30 +116,20 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
             if (!resp.ok || !data?.ok) {
                 throw new Error(data?.error || 'Failed to cancel subscription');
             }
-            const sub = data?.subscription;
-            const status = typeof sub?.status === 'string' ? sub.status : 'cancelled';
-            const currentEnd = typeof sub?.current_end === 'number' ? sub.current_end : null;
 
-            await setDoc(
-                doc(db, 'subscription', user.id),
-                {
-                    status,
-                    cancelAtCycleEnd: true,
-                    cancelRequestedAt: serverTimestamp(),
-                    currentPeriodEnd: currentEnd ? Timestamp.fromDate(new Date(currentEnd * 1000)) : undefined,
-                    updatedAt: serverTimestamp(),
+            // Persistence: Tell backend to update status to CANCELLED locally too
+            await fetch('/api/subscriptions', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
-                { merge: true }
-            );
+                body: JSON.stringify({ status: 'CANCELLED' })
+            });
 
-            await setDoc(
-                doc(db, 'users', user.id),
-                {
-                    planStatus: status,
-                    planUpdatedAt: serverTimestamp(),
-                },
-                { merge: true }
-            );
+            // Update local state
+            setSubscription((prev: any) => ({ ...prev, status: 'CANCELLED' }));
+            alert('Your subscription will be cancelled at the end of the current billing cycle.');
         } catch (e: any) {
             alert(e?.message || 'Failed to cancel subscription.');
         } finally {

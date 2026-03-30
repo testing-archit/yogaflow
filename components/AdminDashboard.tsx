@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, storageRef, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
+import { apiClient } from '../utils/apiClient';
 
 import { DEFAULT_COMMUNITY_SETTINGS, getSettings, updateSettings } from '../utils/settings';
 import type { CommunityChatMessage, CommunityConversation, CommunitySettings } from '../utils/settings';
@@ -221,8 +222,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       // Load users from SQL database via API
       try {
         console.log('👥 Loading users from SQL database...');
-        // Dynamically import apiClient to avoid circular dependency
-        const { apiClient } = await import('../utils/apiClient');
+        // Dynamically import apiClient to avoid circular dependency (now top level)
         const sqlUsers = await apiClient.get('user');
         const users: UserData[] = sqlUsers.map((u: any) => ({
           id: u.id,
@@ -525,33 +525,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   };
 
   const setUserAdmin = async (target: UserData, makeAdmin: boolean) => {
-    if (target.source !== 'firebase') {
-      alert('This user record cannot be updated.');
-      return;
-    }
-
     const label = makeAdmin ? 'make this user an admin' : 'remove admin access from this user';
     if (!confirm(`Are you sure you want to ${label}?`)) return;
 
     try {
-      const userRef = doc(db, 'users', target.id);
-      await setDoc(
-        userRef,
-        {
-          role: makeAdmin ? 'admin' : 'user',
-          isAdmin: makeAdmin,
-          roles: makeAdmin ? ['admin'] : [],
-        },
-        { merge: true }
-      );
+      const newRole = makeAdmin ? 'ADMIN' : 'USER';
+      await apiClient.put('user', target.id, {
+        role: newRole,
+      });
 
       setUsers((prev) =>
         prev.map((u) =>
           u.id === target.id
-            ? { ...u, role: makeAdmin ? 'admin' : 'user', isAdmin: makeAdmin, roles: makeAdmin ? ['admin'] : [] }
+            ? { ...u, role: newRole, isAdmin: makeAdmin }
             : u
         )
       );
+      alert(`User is now ${newRole}`);
     } catch (error: any) {
       console.error('❌ Error updating admin role:', error);
       alert(`Failed to update admin role: ${error?.message || 'Please try again.'}`);
@@ -560,11 +550,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const updateUserStats = async (userId: string, stats: { classesAttended: number; hoursPracticed: number; streak: number }) => {
     try {
-      const userRef = doc(db, 'users', userId);
-      await setDoc(userRef, {
+      await apiClient.put('user', userId, {
         ...stats,
-        statsUpdatedAt: serverTimestamp(),
-      }, { merge: true });
+      });
 
       setUsers((prev) =>
         prev.map((u) =>

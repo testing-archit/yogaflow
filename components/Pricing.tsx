@@ -126,26 +126,31 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
       ? new Date(Number(razorpay.currentEnd) * 1000)
       : getCurrentPeriodEnd(tier);
 
-    const now = new Date().toISOString();
-    await apiClient.put('subscription', user.id, {
-      id: user.id,
-      planType: tier.name,
-      status: razorpay?.status || 'active',
-      currentPeriodEnd: currentPeriodEnd.toISOString(),
-      paymentId: paymentResponse?.razorpay_payment_id ?? null,
-      razorpaySubscriptionId: razorpay?.subscriptionId ?? paymentResponse?.razorpay_subscription_id ?? null,
-      razorpayPlanId: razorpay?.planId ?? null,
-      planFrequency: tier.frequency ?? null,
-      updatedAt: now,
-      createdAt: now,
-    });
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          planId: tier.name,
+          status: razorpay?.status || 'ACTIVE',
+          razorpaySubId: razorpay?.subscriptionId || paymentResponse?.razorpay_subscription_id || null,
+          validUntil: currentPeriodEnd.toISOString(),
+          paymentId: paymentResponse?.razorpay_payment_id || null,
+          planFrequency: tier.frequency || null
+        })
+      });
 
-    await apiClient.put('user', user.id, {
-      plan: tier.name,
-      planStatus: razorpay?.status || 'active',
-      planCurrentPeriodEnd: currentPeriodEnd.toISOString(),
-      planUpdatedAt: now,
-    });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error('Failed to save subscription:', err);
+      }
+    } catch (error) {
+      console.error('Error in saveSubscription:', error);
+    }
   };
 
   const handlePaymentSuccess = (tier: PricingTier, response: any) => {

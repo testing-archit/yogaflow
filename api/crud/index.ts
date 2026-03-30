@@ -72,10 +72,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'PUT':
       case 'PATCH':
         // Optional: Check if user is admin for public table modifications
-        if (publicTables.includes(table) || table === 'appSetting') {
+        if (publicTables.includes(table) || table === 'appSetting' || table === 'user') {
             const user = await prisma.user.findUnique({ where: { clerkId: decodedUserId! } });
             if (!user || user.role !== 'ADMIN') {
-              // Forbidden: Admin access only
+              // Non-admins can't update these tables via generic CRUD
+              return res.status(403).json({ error: 'Forbidden: Admin access only for this table' });
             }
         }
 

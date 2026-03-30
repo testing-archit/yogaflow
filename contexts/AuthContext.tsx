@@ -21,6 +21,7 @@ interface AuthContextType {
   signup: (name: string, email: string, password: string) => Promise<boolean>;
   loginWithGoogle: (googleUser: { name: string; email: string; picture?: string }) => Promise<boolean>;
   logout: () => void;
+  getToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -99,6 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signup,
       loginWithGoogle,
       logout,
+      getToken,
     }}>
       {children}
     </AuthContext.Provider>
