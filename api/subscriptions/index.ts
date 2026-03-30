@@ -89,7 +89,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     try {
       const sub = await prisma.subscription.findUnique({ where: { userId: userRecord.id } });
-      return res.status(200).json(sub || null);
+      if (sub) {
+        return res.status(200).json({
+          ...sub,
+          planType: sub.planId // Alias for backward compatibility with frontend checks
+        });
+      }
+      return res.status(200).json(null);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -100,6 +106,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
       const mapped = mapToPrismaFields(body);
+
+      // If we're setting a planId that looks like a name, ensure it's stored
+      if (body.planName && !mapped.planId) {
+        mapped.planId = body.planName;
+      }
 
       const existingSub = await prisma.subscription.findUnique({ where: { userId: userRecord.id } });
 
@@ -125,7 +136,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      return res.status(200).json(sub);
+      return res.status(200).json({
+        ...sub,
+        planType: sub.planId
+      });
     } catch (e: any) {
       console.error('Subscription upsert error:', e);
       return res.status(500).json({ error: e.message });

@@ -135,7 +135,8 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          planId: tier.name,
+          planId: tier.name, // e.g. "Monthly Subscription"
+          planName: tier.name,
           status: razorpay?.status || 'ACTIVE',
           razorpaySubId: razorpay?.subscriptionId || paymentResponse?.razorpay_subscription_id || null,
           validUntil: currentPeriodEnd.toISOString(),
@@ -200,8 +201,8 @@ export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
           userId: user.id,
           email: user.email || '',
           name: user.name || '',
-          totalCount: 24,
-          trialDays: 30,
+          totalCount: 120, // 10 years
+          trialDays: 0,    // No trial by default
         }),
       });
       const data: any = await readJson(resp);
