@@ -67,18 +67,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [isUserLoaded, isSignedIn, clerkUser]);
 
   const login = async (): Promise<boolean> => {
-    openSignIn();
+    openSignIn({ forceRedirectUrl: '/', fallbackRedirectUrl: '/' });
     return true;
   };
 
   const signup = async (): Promise<boolean> => {
-    openSignUp();
+    openSignUp({ forceRedirectUrl: '/', fallbackRedirectUrl: '/' });
     return true;
   };
 
   const loginWithGoogle = async (): Promise<boolean> => {
     // Clerk handles Google login via its own components/hooks
-    openSignIn();
+    openSignIn({ forceRedirectUrl: '/', fallbackRedirectUrl: '/' });
     return true;
   };
 

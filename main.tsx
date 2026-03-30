@@ -70,7 +70,12 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <ClerkProvider publishableKey={clerkPubKey} {...({ afterSignOutUrl: "/" } as any)}>
+      <ClerkProvider 
+        publishableKey={clerkPubKey}
+        signInFallbackRedirectUrl="/"
+        signUpFallbackRedirectUrl="/"
+        afterSignOutUrl="/"
+      >
         <App />
       </ClerkProvider>
     </AppErrorBoundary>

@@ -36,6 +36,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitc
             }
           }}
           routing="hash"
+          forceRedirectUrl="/"
+          fallbackRedirectUrl="/"
         />
       </div>
     </div>
@@ -75,6 +77,8 @@ export const SignupModal: React.FC<SignupModalProps> = ({ isOpen, onClose, onSwi
             }
           }}
           routing="hash"
+          forceRedirectUrl="/"
+          fallbackRedirectUrl="/"
         />
       </div>
     </div>
