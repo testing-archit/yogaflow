@@ -93,6 +93,19 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
     }
   };
 
+  const handleWatchClass = async (cls: YogaClass, url: string) => {
+    // Attempt tracking
+    if (user?.id) {
+      try {
+        const durationMins = parseInt(cls.duration) || 30; // fallback to 30 mins
+        await apiClient.post('user/activity', { classId: cls.id, durationMins });
+      } catch (err) {
+        console.error('Failed to log activity:', err);
+      }
+    }
+    window.open(ensureAbsoluteUrl(url), '_blank', 'noopener,noreferrer');
+  };
+
   const types = ['All Types', 'Hatha', 'Vinyasa', 'Meditation', 'Mobility'];
   const levels = ['All Levels', 'Beginner', 'Intermediate', 'All'];
 
@@ -247,14 +260,12 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
                                 </span>
                               </div>
                               {finalVideoUrl ? (
-                                <a 
-                                  href={ensureAbsoluteUrl(finalVideoUrl)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block text-lg md:text-3xl font-serif font-bold text-slate-900 hover:text-teal-600 transition-colors leading-tight"
+                                <button 
+                                  onClick={() => handleWatchClass(cls, finalVideoUrl)}
+                                  className="text-left block text-lg md:text-3xl font-serif font-bold text-slate-900 hover:text-teal-600 transition-colors leading-tight"
                                 >
                                   {cls.title}
-                                </a>
+                                </button>
                               ) : (
                                 <h3 className="text-lg md:text-3xl font-serif font-bold text-slate-900 leading-tight">
                                   {cls.title}
@@ -281,14 +292,12 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
                             {/* Action */}
                             <div className="md:w-48 text-right pt-4 md:pt-0 border-t md:border-t-0 border-slate-50">
                               {finalVideoUrl ? (
-                                <a 
-                                  href={ensureAbsoluteUrl(finalVideoUrl)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <button 
+                                  onClick={() => handleWatchClass(cls, finalVideoUrl)}
                                   className="w-full md:w-auto inline-flex items-center justify-center gap-3 text-[10px] md:text-[11px] font-bold uppercase tracking-[0.1em] md:tracking-[0.2em] text-teal-600 hover:text-teal-800 group-hover:translate-x-1 transition-all py-1 md:py-0"
                                 >
                                   Enter Studio <Play size={14} />
-                                </a>
+                                </button>
                               ) : (
                                 <button className="w-full md:w-auto inline-flex items-center justify-center gap-3 text-[10px] md:text-[11px] font-bold uppercase tracking-[0.1em] md:tracking-[0.2em] text-teal-600 hover:text-teal-800 group-hover:translate-x-1 transition-all py-1 md:py-0">
                                   Enter Studio <ExternalLink size={14} />
@@ -308,11 +317,9 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
                         <Reveal key={cls.id} delay={idx * 0.1}>
                           <div className="group relative flex flex-col">
                             {finalVideoUrl ? (
-                              <a 
-                                href={ensureAbsoluteUrl(finalVideoUrl)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="relative aspect-[16/10] bg-slate-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden mb-5 md:mb-8 border border-slate-50 shadow-sm hover:shadow-xl transition-all duration-700 block cursor-pointer"
+                              <button 
+                                onClick={() => handleWatchClass(cls, finalVideoUrl)}
+                                className="relative aspect-[16/10] bg-slate-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden mb-5 md:mb-8 border border-slate-50 shadow-sm hover:shadow-xl transition-all duration-700 block cursor-pointer w-full text-left"
                               >
                                 <div className="absolute inset-0 bg-gradient-to-tr from-teal-600/5 to-transparent"></div>
                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/20 backdrop-blur-sm">
@@ -330,7 +337,7 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
                                      {cls.duration} • {cls.level}
                                    </span>
                                 </div>
-                              </a>
+                              </button>
                             ) : (
                               <div className="relative aspect-[16/10] bg-slate-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden mb-5 md:mb-8 border border-slate-50 shadow-sm transition-all duration-700">
                                 <div className="absolute inset-0 bg-gradient-to-tr from-teal-600/5 to-transparent"></div>
@@ -350,14 +357,12 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
                             <div className="px-2 space-y-2 md:space-y-3">
                               <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Archive Session</p>
                               {finalVideoUrl ? (
-                                <a 
-                                  href={ensureAbsoluteUrl(finalVideoUrl)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block text-xl md:text-3xl font-serif font-bold text-slate-900 group-hover:text-teal-600 transition-colors leading-tight"
+                                <button 
+                                  onClick={() => handleWatchClass(cls, finalVideoUrl)}
+                                  className="block text-left text-xl md:text-3xl font-serif font-bold text-slate-900 group-hover:text-teal-600 transition-colors leading-tight"
                                 >
                                   {cls.title}
-                                </a>
+                                </button>
                               ) : (
                                 <h3 className="text-xl md:text-3xl font-serif font-bold text-slate-900 group-hover:text-teal-600 transition-colors leading-tight">
                                   {cls.title}
@@ -371,14 +376,12 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
                                    ))}
                                  </div>
                                  {finalVideoUrl ? (
-                                   <a 
-                                     href={ensureAbsoluteUrl(finalVideoUrl)}
-                                     target="_blank"
-                                     rel="noopener noreferrer"
+                                   <button 
+                                     onClick={() => handleWatchClass(cls, finalVideoUrl)}
                                      className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-teal-600 hover:translate-x-1 transition-transform flex items-center gap-1"
                                    >
                                      Watch <Play size={12} />
-                                   </a>
+                                   </button>
                                  ) : (
                                    <button className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-teal-600 hover:translate-x-1 transition-transform cursor-default opacity-50">
                                      Coming Soon

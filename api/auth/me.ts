@@ -52,13 +52,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             updatedAt: new Date(),
           }
         });
-        return res.json({ id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, avatarUrl: newUser.avatarUrl });
+        return res.json({ 
+          id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, avatarUrl: newUser.avatarUrl,
+          classesAttended: newUser.classesAttended, hoursPracticed: newUser.hoursPracticed, streak: newUser.streak, lastActiveDate: newUser.lastActiveDate
+        });
       }
 
       return res.status(404).json({ error: 'User not found in database' });
     }
 
-    res.json({ id: user.id, name: user.name, email: user.email, role: user.role, avatarUrl: user.avatarUrl });
+    res.json({ 
+      id: user.id, name: user.name, email: user.email, role: user.role, avatarUrl: user.avatarUrl,
+      classesAttended: user.classesAttended, hoursPracticed: user.hoursPracticed, streak: user.streak, lastActiveDate: user.lastActiveDate
+    });
   } catch (e: any) {
     console.error('Auth error:', e);
     res.status(401).json({ error: 'Invalid session', details: e.message });

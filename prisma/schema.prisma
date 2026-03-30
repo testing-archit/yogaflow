@@ -108,12 +108,17 @@ model User {
   name                  String?
   role                  Role                    @default(USER)
   avatarUrl             String?
+  classesAttended       Int                     @default(0)
+  hoursPracticed        Float                   @default(0)
+  streak                Int                     @default(0)
+  lastActiveDate        DateTime?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime
   CommunityConversation CommunityConversation[]
   CommunityMessage      CommunityMessage[]
   Subscription          Subscription?
   Entitlement           Entitlement[]
+  UserActivity          UserActivity[]
 }
 
 model Entitlement {
@@ -140,6 +145,21 @@ model YogaClass {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime
   Instructor   Instructor @relation(fields: [instructorId], references: [id])
+  UserActivity UserActivity[]
+}
+
+model UserActivity {
+  id           String    @id @default(cuid())
+  userId       String
+  classId      String?
+  durationMins Int
+  completedAt  DateTime  @default(now())
+  
+  User         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  YogaClass    YogaClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@index([userId, completedAt])
+
 }
 
 enum Role {
