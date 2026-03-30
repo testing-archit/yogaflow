@@ -98,7 +98,21 @@ export const Classes: React.FC<ClassesProps> = ({ initialTab = 'live', onNavHome
     if (user?.id) {
       try {
         const durationMins = parseInt(cls.duration) || 30; // fallback to 30 mins
-        await apiClient.post('user/activity', { classId: cls.id, durationMins });
+        
+        let token = '';
+        const clerk = (window as any).Clerk;
+        if (clerk?.session) {
+          token = await clerk.session.getToken();
+        }
+
+        await fetch('/api/user/activity', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ classId: cls.id, durationMins })
+        });
       } catch (err) {
         console.error('Failed to log activity:', err);
       }
