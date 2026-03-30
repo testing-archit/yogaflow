@@ -186,46 +186,114 @@ export default async function handler(req: any, res: any) {
   // POST /api/razorpay?action=webhook
   if (req.method === 'POST' && action === 'webhook') {
     if (!webhookSecret) return res.status(500).send('Missing webhook secret');
+    
     const rawBody = await getRawBody(req);
     const signature = req.headers['x-razorpay-signature'] as string | undefined;
+    
     if (!signature) return res.status(400).send('Missing signature');
+    
     const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
     if (expected !== signature) return res.status(400).send('Invalid signature');
+    
     let event: any = null;
-    try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).send('Invalid JSON'); }
+    try { 
+      event = JSON.parse(rawBody.toString('utf8')); 
+    } catch { 
+      return res.status(400).send('Invalid JSON'); 
+    }
+
+    const eventType = event.event;
+    console.log(`🔔 Razorpay Webhook received: ${eventType}`);
+
     try {
-      const entity = event?.payload?.subscription?.entity;
-      const userId = entity?.notes?.userId;
-      if (!userId || typeof userId !== 'string') return res.status(200).json({ ok: true });
-      const status = typeof entity?.status === 'string' ? entity.status.toUpperCase() : undefined;
-      const planId = typeof entity?.plan_id === 'string' ? entity.plan_id : undefined;
-      const subscriptionId = typeof entity?.id === 'string' ? entity.id : undefined;
-      const currentEnd = typeof entity?.current_end === 'number' ? new Date(entity.current_end * 1000) : undefined;
       const now = new Date();
-      // Ensure user exists first (lookup by Clerk ID only)
-      let userRecord = await prisma.user.findFirst({ where: { clerkId: userId } });
-      if (!userRecord) {
-        userRecord = await prisma.user.create({
-          data: {
-            id: crypto.randomUUID(),
-            clerkId: userId,
-            email: entity?.notes?.email || `unknown_${userId}@domain.com`,
-            name: entity?.notes?.name || null,
-            createdAt: now,
+
+      // CASE 1: Subscription Events
+      if (eventType.startsWith('subscription.')) {
+        const entity = event.payload.subscription.entity;
+        const userId = entity.notes?.userId;
+        if (!userId) return res.status(200).json({ ok: true, message: 'No userId in notes' });
+
+        const status = entity.status.toUpperCase();
+        const planId = entity.plan_id;
+        const subscriptionId = entity.id;
+        const currentEnd = entity.current_end ? new Date(entity.current_end * 1000) : undefined;
+
+        // Find or create user
+        let user = await prisma.user.findFirst({ where: { clerkId: userId } });
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              id: crypto.randomUUID(),
+              clerkId: userId,
+              email: entity.notes?.email || `user_${userId}@placeholder.com`,
+              name: entity.notes?.name || null,
+              updatedAt: now,
+              role: 'USER',
+            }
+          });
+        }
+
+        await prisma.subscription.upsert({
+          where: { userId: user.id },
+          update: {
+            status: status as any,
+            planId: planId,
+            razorpaySubId: subscriptionId,
+            validUntil: currentEnd,
             updatedAt: now,
-            role: 'USER',
           },
+          create: {
+            id: crypto.randomUUID(),
+            userId: user.id,
+            planId: planId,
+            status: status as any,
+            razorpaySubId: subscriptionId,
+            validUntil: currentEnd,
+            updatedAt: now,
+          }
         });
       }
-      const userDbId = userRecord.id;
-      const existingSub = await prisma.subscription.findUnique({ where: { userId: userDbId } });
-      if (existingSub) {
-        await prisma.subscription.update({ where: { userId: userDbId }, data: { status: status as any || existingSub.status, planId: planId || existingSub.planId, razorpaySubId: subscriptionId || existingSub.razorpaySubId, validUntil: currentEnd || existingSub.validUntil, updatedAt: now } });
-      } else {
-        await prisma.subscription.create({ data: { id: crypto.randomUUID(), userId: userDbId, planId: planId || 'unknown', status: status as any || 'INACTIVE', razorpaySubId: subscriptionId || '', validUntil: currentEnd || now, createdAt: now, updatedAt: now } });
+
+      // CASE 2: Order/Payment Events (One-time Enrolments)
+      else if (eventType === 'order.paid' || eventType === 'payment.captured') {
+        const entity = eventType === 'order.paid' ? event.payload.order.entity : event.payload.payment.entity;
+        const userId = entity.notes?.userId;
+        const productKey = entity.notes?.productKey; // e.g. FULL_COURSE_6_MONTHS
+
+        if (!userId || !productKey) {
+          return res.status(200).json({ ok: true, message: 'Missing metadata' });
+        }
+
+        let user = await prisma.user.findFirst({ where: { clerkId: userId } });
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              id: crypto.randomUUID(),
+              clerkId: userId,
+              email: entity.notes?.email || `user_${userId}@placeholder.com`,
+              updatedAt: now,
+            }
+          });
+        }
+
+        await prisma.entitlement.upsert({
+          where: { userId_productKey: { userId: user.id, productKey } },
+          update: { purchasedAt: now },
+          create: {
+            id: crypto.randomUUID(),
+            userId: user.id,
+            productKey,
+            purchasedAt: now,
+          }
+        });
       }
+
       return res.status(200).json({ ok: true });
-    } catch (e: any) { return res.status(500).send(e?.message || 'Webhook error'); }
+    } catch (e: any) {
+      console.error('❌ Webhook Processing Error:', e);
+      return res.status(500).send(e?.message || 'Webhook internal error');
+    }
   }
 
   // POST /api/razorpay?action=full-course-order
@@ -266,7 +334,12 @@ export default async function handler(req: any, res: any) {
       const order = await razorpay.orders.create({
         amount: AMOUNT_PAISE_FULL,
         currency: 'INR',
-        receipt: `receipt_fc_${externalId.slice(0, 5)}_${Date.now()}`
+        receipt: `receipt_fc_${externalId.slice(0, 5)}_${Date.now()}`,
+        notes: {
+          userId: externalId,
+          productKey: PRODUCT_KEY_FULL,
+          email: user.email
+        }
       });
       return res.status(200).json({ ok: true, orderId: order.id, keyId });
     } catch (error: any) {
@@ -362,7 +435,12 @@ export default async function handler(req: any, res: any) {
       const order = await razorpay.orders.create({
         amount: AMOUNT_PAISE_TRIAL,
         currency: 'INR',
-        receipt: `receipt_tr_${externalId.slice(0, 5)}_${Date.now()}`
+        receipt: `receipt_tr_${externalId.slice(0, 5)}_${Date.now()}`,
+        notes: {
+          userId: externalId,
+          productKey: PRODUCT_KEY_TRIAL,
+          email: user.email
+        }
       });
       return res.status(200).json({ ok: true, orderId: order.id, keyId });
     } catch (error: any) {
