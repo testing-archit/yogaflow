@@ -54,12 +54,11 @@ async function startServer() {
   const meHandler = await import('./api/auth/me.js');
   app.all('/api/auth/me', makeHandler(meHandler));
 
-  // Entitlement routes
-  const trialEntHandler = await import('./api/entitlements/trial.js');
-  app.all('/api/entitlements/trial', makeHandler(trialEntHandler));
-
-  const fullCourseEntHandler = await import('./api/entitlements/full-course.js');
-  app.all('/api/entitlements/full-course', makeHandler(fullCourseEntHandler));
+  // Entitlement routes (dynamic: /api/entitlements/:key)
+  const entitlementsHandler = await import('./api/entitlements/[key].js');
+  app.all('/api/entitlements/:key', (req, res) => {
+    makeHandler(entitlementsHandler)(withQuery(req, { key: req.params.key }), res);
+  });
 
   // Razorpay routes
   const razorpayHandler = await import('./api/razorpay/index.js');
