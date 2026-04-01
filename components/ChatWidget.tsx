@@ -21,6 +21,29 @@ export const ChatWidget: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { getToken, isAuthenticated, user } = useAuth();
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
+
+  useEffect(() => {
+    async function fetchHistory() {
+      if (!isOpen || !isAuthenticated || hasLoadedHistory) return;
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/assistant', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.messages && data.messages.length > 0) {
+            setMessages(data.messages);
+          }
+          setHasLoadedHistory(true);
+        }
+      } catch (e) {
+        console.error('Failed to load history:', e);
+      }
+    }
+    fetchHistory();
+  }, [isOpen, isAuthenticated, hasLoadedHistory, getToken]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -55,14 +78,14 @@ export const ChatWidget: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ messages: [...messages, newMessage] })
+        body: JSON.stringify({ message: newMessage.content })
       });
 
       if (res.ok) {
         const data = await res.json();
         setMessages(prev => [
           ...prev,
-          { id: (Date.now() + 1).toString(), role: 'assistant', content: data.reply }
+          data.messageObj || { id: (Date.now() + 1).toString(), role: 'assistant', content: data.reply }
         ]);
       } else {
         const err = await res.json();

@@ -168,6 +168,16 @@ CREATE TABLE IF NOT EXISTS public.research_topics (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 15. ai_chat_messages
+CREATE TABLE IF NOT EXISTS public.ai_chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
 -- ─────────────────────────────────────────────────────────────
 -- AUTH TRIGGER — auto-creates public.users on signup
 -- ─────────────────────────────────────────────────────────────
@@ -275,3 +285,8 @@ CREATE POLICY "contacts_select_admin" ON public.contact_requests FOR SELECT USIN
 ALTER TABLE public.newsletter_subscribers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "newsletter_insert_all" ON public.newsletter_subscribers FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "newsletter_select_admin" ON public.newsletter_subscribers FOR SELECT USING (public.is_admin());
+
+-- ai_chat_messages
+ALTER TABLE public.ai_chat_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "ai_messages_select_own" ON public.ai_chat_messages FOR SELECT USING (auth.uid() = user_id OR public.is_admin());
+CREATE POLICY "ai_messages_insert_own" ON public.ai_chat_messages FOR INSERT WITH CHECK (auth.uid() = user_id OR public.is_admin());
