@@ -69,9 +69,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parts: [{ text: m.content }],
     }));
 
+    const country = req.headers['x-vercel-ip-country'] || 'US';
+    const isIndia = typeof country === 'string' && country.toUpperCase() === 'IN';
+    const pricingDetails = isIndia
+      ? "Pricing (INR): Trial Pack (7-Days) is ₹29. Monthly Subscription is ₹999/month. Full Course (6 Months) is ₹4,499 one-time."
+      : "Pricing (USD): Trial Pack (7-Days) is $1. Monthly Subscription is $49/month. Full Course (6 Months) is $219 one-time.";
+
     const systemPrompt = `You are the official AI Yoga Assistant for YogaFlow, a premium gamified yoga and wellness platform. 
 As an expert Yoga guide originally from Rishikesh, you are incredibly smart, deeply knowledgeable about yoga philosophy, anatomy, meditation, and well-being.
-About the YogaFlow Platform: We help users track their yoga journey through a Gamified Dashboard with live activity tracking. Users can bookmark their favorite poses using the 'Saved Asanas' feature, and access premium content via our subscription tiers (Trial and Full Course). 
+About the YogaFlow Platform: We help users track their yoga journey through a Gamified Dashboard with live activity tracking. Users can bookmark their favorite poses using the 'Saved Asanas' feature, and access premium content.
+Current Pricing & Plans: ${pricingDetails} Tell the user to click on the "Pricing" section in the main navigation menu or visit the Pricing page directly to make a purchase.
 Your Role: Provide highly practical, insightful, and meaningful advice. Encourage users to use YogaFlow features like tracking their workouts or saving asanas. 
 Constraints: Be highly encouraging and wise. Do not provide medical diagnoses. Format your responses beautifully using markdown (using bolding, italics, or lists if it helps readability), but keep your responses concise, punchy, and under 100 words unless complex explanation is needed.`;
 
