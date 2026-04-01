@@ -1,103 +1,123 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClerkClient } from '@clerk/backend';
-import { prisma } from '../../utils/prisma.js';
+import { getSupabaseUser } from '../../utils/auth-helper.js';
+import { supabaseAdmin } from '../../utils/supabase-server.js';
 
-const clerkClient = createClerkClient({
-  secretKey: (process.env.CLERK_SECRET_KEY || '').trim(),
-  publishableKey: (process.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim(),
-});
+// Tables that anyone can read without authentication
+const PUBLIC_READ_TABLES = ['asanas', 'instructors', 'yoga_classes', 'research_topics', 'app_settings'];
 
-// Utility to parse JSON
+// Tables that only admins can mutate via this generic endpoint
+const ADMIN_WRITE_TABLES = ['asanas', 'instructors', 'yoga_classes', 'research_topics', 'app_settings', 'users', 'contact_requests', 'newsletter_subscribers'];
+
+// Complete whitelist of allowed tables (prevents arbitrary table access)
+const ALLOWED_TABLES = [
+  ...PUBLIC_READ_TABLES,
+  'subscriptions', 'entitlements', 'user_activity',
+  'community_conversations', 'community_messages',
+  'contact_requests', 'newsletter_subscribers',
+];
+
 const parseBody = (body: any) => (typeof body === 'string' ? JSON.parse(body) : body);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { table, id } = req.query as { table: string, id?: string };
-  
-  if (!table || !(table in prisma)) {
-    return res.status(400).json({ error: 'Invalid table name' });
+  const { table, id } = req.query as { table: string; id?: string };
+
+  if (!table || !ALLOWED_TABLES.includes(table)) {
+    return res.status(400).json({ error: 'Invalid or disallowed table name' });
   }
 
-  // Security: check token for all operations except GETs on public tables
-  // We'll consider asanas, instructors, classes, research, settings as public reads
-  let decodedUserId: string | null = null;
-  const publicTables = ['asana', 'instructor', 'yogaClass', 'researchTopic', 'appSetting', 'classVideo'];
-  
-  const isPublicRead = req.method === 'GET' && publicTables.includes(table);
+  const isPublicRead = req.method === 'GET' && PUBLIC_READ_TABLES.includes(table);
+  let userId: string | null = null;
+  let isAdmin = false;
 
   if (!isPublicRead) {
-    try {
-      const requestState = await clerkClient.authenticateRequest(req as any);
-      const { userId } = requestState.toAuth();
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized: Invalid or missing Clerk session' });
-      }
-      decodedUserId = userId;
-    } catch (e: any) {
-      console.error('Clerk Auth Error:', e);
-      return res.status(401).json({ error: 'Unauthorized', details: e.message });
+    const authUser = await getSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'Unauthorized: Missing or invalid session' });
     }
-  }
+    userId = authUser.id;
 
-  // Use (prisma as any)[table] dynamically
-  const db: any = (prisma as any)[table];
+    // Resolve admin status
+    const { data: userRow } = await supabaseAdmin
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    isAdmin = userRow?.role === 'ADMIN';
+  }
 
   try {
     switch (req.method) {
-      case 'GET':
+      case 'GET': {
         if (id) {
-          const item = await db.findUnique({ where: { id } });
-          return res.status(200).json(item);
-        }
-        
-        // Handling custom queries via simple filtering
-        const filtersStr = req.query.filters as string;
-        let where = {};
-        if (filtersStr) {
-          try {
-            where = JSON.parse(filtersStr);
-          } catch(e) {}
-        }
-        
-        let orderBy = undefined;
-        if (req.query.orderBy) {
-             const key = req.query.orderBy as string;
-             const dir = req.query.orderDir === 'desc' ? 'desc' : 'asc';
-             orderBy = { [key]: dir };
+          const { data, error } = await supabaseAdmin.from(table).select('*').eq('id', id).single();
+          if (error) throw error;
+          return res.status(200).json(data);
         }
 
-        const items = await db.findMany({ where, orderBy });
-        return res.status(200).json(items);
+        // Build filters from query params
+        let query = supabaseAdmin.from(table).select('*');
+
+        const filtersStr = req.query.filters as string | undefined;
+        if (filtersStr) {
+          try {
+            const filters = JSON.parse(filtersStr);
+            Object.entries(filters).forEach(([key, value]) => {
+              query = query.eq(key, value as any);
+            });
+          } catch { /* ignore bad filter JSON */ }
+        }
+
+        if (req.query.orderBy) {
+          const dir = req.query.orderDir === 'desc' ? false : true;
+          query = query.order(req.query.orderBy as string, { ascending: dir });
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return res.status(200).json(data);
+      }
 
       case 'POST':
       case 'PUT':
-      case 'PATCH':
-        // Optional: Check if user is admin for public table modifications
-        if (publicTables.includes(table) || table === 'appSetting' || table === 'user') {
-            const user = await prisma.user.findUnique({ where: { clerkId: decodedUserId! } });
-            if (!user || user.role !== 'ADMIN') {
-              // Non-admins can't update these tables via generic CRUD
-              return res.status(403).json({ error: 'Forbidden: Admin access only for this table' });
-            }
+      case 'PATCH': {
+        // Admin-only for protected tables
+        if (ADMIN_WRITE_TABLES.includes(table) && !isAdmin) {
+          return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
 
         const body = parseBody(req.body);
-        if (id || body.id) {
-            // Update
-            const finalId = id || body.id;
-            delete body.id;
-            const updated = await db.update({ where: { id: finalId }, data: body });
-            return res.status(200).json(updated);
-        } else {
-            // Create
-            const created = await db.create({ data: body });
-            return res.status(201).json(created);
-        }
+        const targetId = id || body.id;
 
-      case 'DELETE':
+        if (targetId) {
+          delete body.id;
+          const { data, error } = await supabaseAdmin
+            .from(table)
+            .update(body)
+            .eq('id', targetId)
+            .select()
+            .single();
+          if (error) throw error;
+          return res.status(200).json(data);
+        } else {
+          const { data, error } = await supabaseAdmin
+            .from(table)
+            .insert(body)
+            .select()
+            .single();
+          if (error) throw error;
+          return res.status(201).json(data);
+        }
+      }
+
+      case 'DELETE': {
         if (!id) return res.status(400).json({ error: 'Missing ID for delete' });
-        // Check admin role if needed
-        await db.delete({ where: { id } });
+        if (ADMIN_WRITE_TABLES.includes(table) && !isAdmin) {
+          return res.status(403).json({ error: 'Forbidden: Admin access required' });
+        }
+        const { error } = await supabaseAdmin.from(table).delete().eq('id', id);
+        if (error) throw error;
         return res.status(204).end();
+      }
 
       default:
         return res.status(405).json({ error: 'Method not allowed' });

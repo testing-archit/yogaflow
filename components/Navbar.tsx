@@ -5,7 +5,6 @@ import { Menu, X, User } from 'lucide-react';
 import { LOGO_URL } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import { LoginModal, SignupModal } from './LoginModal';
-import { Show, UserButton } from '@clerk/react';
 
 interface NavbarProps {
   onNavHome: () => void;
@@ -44,7 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [shouldNavigateToPricing, setShouldNavigateToPricing] = useState(false);
   const [shouldNavigateToDashboard, setShouldNavigateToDashboard] = useState(false);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
 
   // Navigate to pricing after successful login if triggered from "Start Free Month"
   useEffect(() => {
@@ -162,7 +161,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Profile Section */}
           <div className="relative flex items-center">
-            <Show when="signed-out">
+            {!isAuthenticated ? (
               <button
                 onClick={() => {
                   setShouldNavigateToDashboard(true);
@@ -173,17 +172,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <User size={isScrolled ? 16 : 18} />
               </button>
-            </Show>
-            <Show when="signed-in">
-              <UserButton 
-                appearance={{
-                  elements: {
-                    userButtonAvatarBox: isScrolled ? 'w-9 h-9' : 'w-10 h-10',
-                    userButtonTrigger: 'hover:scale-110 active:scale-95 transition-all'
-                  }
-                }}
-              />
-            </Show>
+            ) : (
+              <button
+                onClick={() => onNavDashboard?.('profile')}
+                className={`relative flex items-center justify-center rounded-full bg-teal-600 text-white font-bold text-xs transition-all duration-300 hover:scale-110 active:scale-95 hover:bg-teal-700 ${isScrolled ? 'w-9 h-9' : 'w-10 h-10'}`}
+                aria-label="Dashboard"
+                title={user?.name || 'Dashboard'}
+              >
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : <User size={16} />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -261,7 +259,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Mobile Profile Section */}
             <div className="pt-4">
-              <Show when="signed-out">
+              {!isAuthenticated ? (
                 <button
                   onClick={() => {
                     setIsMobileMenuOpen(false);
@@ -273,12 +271,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <User size={20} />
                   <span>Login / Sign Up</span>
                 </button>
-              </Show>
-              <Show when="signed-in">
+              ) : (
                 <div className="w-full bg-teal-50/50 rounded-3xl p-4 border border-teal-100/50 flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <UserButton />
-                    <span className="font-serif font-bold text-slate-900">Your Account</span>
+                    <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-xs">
+                      {user?.name ? user.name.slice(0, 2).toUpperCase() : <User size={16} />}
+                    </div>
+                    <span className="font-serif font-bold text-slate-900">{user?.name || 'Your Account'}</span>
                   </div>
                   <Button 
                     variant="primary" 
@@ -292,7 +291,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Dashboard
                   </Button>
                 </div>
-              </Show>
+              )}
             </div>
           </div>
         </div>

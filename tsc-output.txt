@@ -1,0 +1,4 @@
+components/AdminDashboard.tsx(3533,23): error TS2552: Cannot find name 'storageRef'. Did you mean 'Storage'?
+components/AdminDashboard.tsx(3533,34): error TS2552: Cannot find name 'storage'. Did you mean 'Storage'?
+components/AdminDashboard.tsx(3534,13): error TS2304: Cannot find name 'uploadBytes'.
+components/AdminDashboard.tsx(3535,25): error TS2304: Cannot find name 'getDownloadURL'.

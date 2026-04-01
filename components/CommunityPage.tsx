@@ -2,13 +2,12 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Reveal } from './Reveal';
 import { Search, MessageSquare, Users, Settings, Info, Send, Smile, Paperclip, X, FileText, Heart, Shield } from 'lucide-react';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
 
 import { DEFAULT_COMMUNITY_SETTINGS, type CommunityChatMessage, type CommunityConversation, type CommunitySettings } from '../utils/settings';
 import { useAuth } from '../contexts/AuthContext';
 
 export const CommunityPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const currentUserId = (user as any)?.id || '';
   const [activeTab, setActiveTab] = useState<'All' | 'Direct' | 'Groups'>('All');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -46,110 +45,54 @@ export const CommunityPage: React.FC = () => {
     scrollToBottom();
   }, [selectedId, chatHistories, liveMessages]);
 
+  // Fetch conversations with polling
   useEffect(() => {
-    const convRef = collection(db, 'community_conversations');
-    const unsubscribe = onSnapshot(
-      convRef,
-      (snapshot) => {
-        const next = snapshot.docs.map((d) => {
-          const data = d.data() as any;
-          const author = typeof data.author === 'string' && data.author.trim().length > 0 ? data.author : 'New Chat';
-          const avatarRaw =
-            typeof data.avatar === 'string' && data.avatar.trim().length > 0
-              ? data.avatar
-              : author.replace(/\s+/g, '').slice(0, 2).toUpperCase();
-          const members = typeof data.members === 'number' && Number.isFinite(data.members) ? data.members : undefined;
-
-          return {
-            id: d.id,
-            author,
-            avatar: avatarRaw,
-            lastText: typeof data.lastText === 'string' ? data.lastText : '',
-            time: typeof data.time === 'string' ? data.time : 'Just now',
-            unreadCount: typeof data.unreadCount === 'number' ? data.unreadCount : undefined,
-            isGroup: !!data.isGroup,
-            members,
-            isSupportGroup: !!data.isSupportGroup,
-          } satisfies CommunityConversation;
+    const fetchConversations = async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/community?action=conversations', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
-        setDynamicConversations(next);
-      },
-      (error) => {
-        console.error('Error listening to community conversations:', error);
-      }
-    );
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const settingsRef = doc(db, 'settings', 'app_settings');
-    const unsubscribe = onSnapshot(
-      settingsRef,
-      (snap) => {
-        const data = snap.data() as any;
-        const community = data?.community as Partial<CommunitySettings> | undefined;
-        if (!community) return;
-
-        if (typeof community.pageTitle === 'string') setPageTitle(community.pageTitle);
-        if (typeof community.pageSubtitle === 'string') setPageSubtitle(community.pageSubtitle);
-        if (typeof community.welcomeTitle === 'string') setWelcomeTitle(community.welcomeTitle);
-        if (typeof community.welcomeSubtitle === 'string') setWelcomeSubtitle(community.welcomeSubtitle);
-        if (Array.isArray(community.conversations) && community.conversations.length > 0) {
-          setSettingsConversations(community.conversations as CommunityConversation[]);
+        if (res.ok) {
+          const data = await res.json();
+          setDynamicConversations(data);
         }
-        if (community.histories && typeof community.histories === 'object') {
-          setChatHistories(community.histories as Record<string, CommunityChatMessage[]>);
-        }
-      },
-      (error) => {
-        console.error('Error listening to community settings:', error);
+      } catch (err) {
+        console.error('Error fetching conversations:', err);
       }
-    );
-    return unsubscribe;
-  }, []);
+    };
 
+    fetchConversations();
+    const interval = setInterval(fetchConversations, 5000);
+    return () => clearInterval(interval);
+  }, [getToken]);
+
+  // Fetch messages for selected conversation with polling
   useEffect(() => {
     if (!selectedId) {
       setLiveMessages(null);
       return;
     }
 
-    const messagesRef = collection(db, 'community_conversations', selectedId, 'messages');
-    const q = query(messagesRef, orderBy('createdAt', 'asc'));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const next = snapshot.docs.map((d) => {
-          const data = d.data() as any;
-          const senderId = typeof data.senderId === 'string' ? data.senderId : '';
-          const createdAt = data.createdAt?.toDate?.();
-          const time =
-            typeof data.time === 'string' && data.time.trim().length > 0
-              ? data.time
-              : createdAt
-                ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : '';
-
-          return {
-            id: d.id,
-            sender: typeof data.sender === 'string' ? data.sender : 'Unknown',
-            avatar: typeof data.avatar === 'string' ? data.avatar : '',
-            text: typeof data.text === 'string' ? data.text : '',
-            time,
-            isMe: senderId && currentUserId ? senderId === currentUserId : !!data.isMe,
-            attachment: data.attachment && typeof data.attachment === 'object' ? data.attachment : undefined,
-          } satisfies CommunityChatMessage;
+    const fetchMessages = async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`/api/community?action=messages&conversationId=${selectedId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
-        setLiveMessages(next);
-      },
-      (error) => {
-        console.error('Error listening to community messages:', error);
-        setLiveMessages(null);
+        if (res.ok) {
+          const data = await res.json();
+          setLiveMessages(data);
+        }
+      } catch (err) {
+        console.error('Error fetching messages:', err);
       }
-    );
+    };
 
-    return unsubscribe;
-  }, [currentUserId, selectedId]);
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+    return () => clearInterval(interval);
+  }, [selectedId, getToken]);
 
   const handleSendMessage = async () => {
     if ((!inputText.trim() && !attachedFile) || !selectedId) return;
@@ -176,35 +119,29 @@ export const CommunityPage: React.FC = () => {
     };
 
     try {
-      await addDoc(collection(db, 'community_conversations', selectedId, 'messages'), {
-        sender: newMessage.sender,
-        avatar: newMessage.avatar,
-        senderId,
-        text: newMessage.text,
-        time: newMessage.time,
-        isMe: true,
-        attachment: newMessage.attachment || null,
-        createdAt: serverTimestamp(),
+      const token = await getToken();
+      const res = await fetch('/api/community?action=send-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          conversationId: selectedId,
+          text: inputText
+        })
       });
 
-      await setDoc(
-        doc(db, 'community_conversations', selectedId),
-        { lastText: newMessage.text || '', time: newMessage.time, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
+      if (!res.ok) {
+        throw new Error('Failed to send message');
+      }
 
       setInputText('');
       setAttachedFile(null);
       setShowEmojiPicker(false);
     } catch (error) {
       console.error('Error sending message:', error);
-      setChatHistories(prev => ({
-        ...prev,
-        [selectedId]: [...(prev[selectedId] || []), newMessage]
-      }));
-      setInputText('');
-      setAttachedFile(null);
-      setShowEmojiPicker(false);
+      alert('Failed to send message over SQL. Please check your connection.');
     }
   };
 

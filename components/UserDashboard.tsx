@@ -32,7 +32,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
     const [subscriptionLoading, setSubscriptionLoading] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
     const [isCancellingSubscription, setIsCancellingSubscription] = useState(false);
-
+    
+    // Live Dashboard / Gamification stats
+    const [dashboardStats, setDashboardStats] = useState({ classesAttended: 0, hoursPracticed: 0, streak: 0, joinDate: '' });
+    const [pastClasses, setPastClasses] = useState<any[]>([]);
+    const [upcomingClasses, setUpcomingClasses] = useState<any[]>([]);
+    const [savedAsanas, setSavedAsanas] = useState<any[]>([]);
+    
     const formatDate = (dateString?: string) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
@@ -50,6 +56,42 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
         }
         return 'N/A';
     };
+
+    useEffect(() => {
+        const fetchDashboardData = async () => {
+            if (!user?.id) return;
+            try {
+                const token = await getToken();
+                const [resDash, resSaved] = await Promise.all([
+                   fetch('/api/user/dashboard', { headers: { 'Authorization': `Bearer ${token}` } }),
+                   fetch('/api/user/saved-asanas', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                
+                if (resDash.ok) {
+                    const data = await resDash.json();
+                    setDashboardStats(data.stats || { classesAttended: 0, hoursPracticed: 0, streak: 0, joinDate: '' });
+                    setPastClasses(data.pastClasses || []);
+                    setUpcomingClasses(data.upcomingClasses || []);
+                }
+                if (resSaved.ok) {
+                    const data = await resSaved.json();
+                    const mapped = (data.savedAsanas || []).map((saved: any) => ({
+                        id: saved.id,
+                        asanaId: saved.asanaId,
+                        name: saved.Asana?.sanskritName || 'Unknown Asana',
+                        englishName: saved.Asana?.englishName || 'Unknown',
+                        level: saved.Asana?.difficulty || 'All Levels',
+                        duration: '1-3 mins',
+                        image: saved.Asana?.imageUrl || 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&q=80&w=800'
+                    }));
+                    setSavedAsanas(mapped);
+                }
+            } catch (err) {
+                console.error('Failed to grab dashboard stats:', err);
+            }
+        };
+        fetchDashboardData();
+    }, [user?.id, getToken]);
 
     useEffect(() => {
         if (activeTab !== 'subscription') return;
@@ -144,15 +186,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
         { id: 'subscription', label: 'Subscription', icon: CreditCard },
     ];
 
-    // Mock Data
-    const savedAsanas = [
-        { id: 1, name: 'Adho Mukha Svanasana', englishName: 'Downward-Facing Dog', level: 'Beginner', duration: '1-3 mins', image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&q=80&w=800' },
-        { id: 2, name: 'Vrikshasana', englishName: 'Tree Pose', level: 'Beginner', duration: '1-2 mins', image: 'https://images.unsplash.com/photo-1599901860904-17e0ed3af3ea?auto=format&fit=crop&q=80&w=800' },
-        { id: 3, name: 'Natarajasana', englishName: 'Lord of the Dance Pose', level: 'Advanced', duration: '30-60 secs', image: 'https://images.unsplash.com/photo-1508704019882-f9cf40e475b4?auto=format&fit=crop&q=80&w=800' }
-    ];
 
-    const pastClasses: any[] = [];
-    const upcomingClasses: any[] = [];
 
     return (
         <div className="min-h-screen bg-slate-50 pt-32 pb-24">
@@ -259,7 +293,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-slate-500 mb-1">Member Since</p>
-                                                    <p className="font-medium text-slate-900">{formatDate(user?.joinDate)}</p>
+                                                    <p className="font-medium text-slate-900">{formatDate(dashboardStats?.joinDate || user?.joinDate)}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -268,15 +302,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onBack, initialTab
                                             <h4 className="font-bold text-slate-900 mb-4">Practice Stats</h4>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div className="bg-teal-50 p-4 rounded-xl text-center">
-                                                    <p className="text-3xl font-serif font-bold text-teal-600 mb-1">{user?.classesAttended || 0}</p>
+                                                    <p className="text-3xl font-serif font-bold text-teal-600 mb-1">{dashboardStats.classesAttended}</p>
                                                     <p className="text-xs text-slate-600 font-medium uppercase tracking-wider">Classes Attended</p>
                                                 </div>
                                                 <div className="bg-indigo-50 p-4 rounded-xl text-center">
-                                                    <p className="text-3xl font-serif font-bold text-indigo-600 mb-1">{user?.hoursPracticed || 0}</p>
+                                                    <p className="text-3xl font-serif font-bold text-indigo-600 mb-1">{dashboardStats.hoursPracticed}</p>
                                                     <p className="text-xs text-slate-600 font-medium uppercase tracking-wider">Hours Practiced</p>
                                                 </div>
                                                 <div className="bg-rose-50 p-4 rounded-xl text-center col-span-2">
-                                                    <p className="text-3xl font-serif font-bold text-rose-600 mb-1">{user?.streak || 0}</p>
+                                                    <p className="text-3xl font-serif font-bold text-rose-600 mb-1">{dashboardStats.streak}</p>
                                                     <p className="text-xs text-slate-600 font-medium uppercase tracking-wider">Current Streak (Days)</p>
                                                 </div>
                                             </div>

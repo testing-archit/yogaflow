@@ -73,9 +73,10 @@ async function startServer() {
     makeHandler(crudHandler)(withQuery(req, { table: req.params.table, id: req.params.id }), res);
   });
 
-  // Webhook routes
-  const clerkWebhookHandler = await import('./api/webhooks/clerk.js');
-  app.all('/api/webhooks/clerk', makeHandler(clerkWebhookHandler));
+  // Assistant route
+  const assistantHandler = await import('./api/assistant.js');
+  app.all('/api/assistant', makeHandler(assistantHandler));
+
 
   app.listen(PORT, () => {
     console.log(`[API Server] running on http://localhost:${PORT}`);

@@ -32,6 +32,7 @@ const PrivacyPolicy = lazyNamed<React.FC<any>>(() => import('./components/Privac
 const TermsConditions = lazyNamed<React.FC<any>>(() => import('./components/TermsConditions'), 'TermsConditions');
 const AdminDashboard = lazyNamed<React.FC<any>>(() => import('./components/AdminDashboard'), 'AdminDashboard');
 const UserDashboard = lazyNamed<React.FC<any>>(() => import('./components/UserDashboard'), 'UserDashboard');
+const ChatWidget = lazyNamed<React.FC>(() => import('./components/ChatWidget'), 'ChatWidget');
 
 const AppContent: React.FC = () => {
   // Initialize view based on current path
@@ -347,6 +348,12 @@ const AppContent: React.FC = () => {
             onNavTerms={handleNavTerms}
             isHomePage={view === 'home'}
           />
+        </Suspense>
+      )}
+
+      {view !== 'admin' && (
+        <Suspense fallback={null}>
+          <ChatWidget />
         </Suspense>
       )}
     </div>

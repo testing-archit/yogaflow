@@ -1,72 +1,51 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClerkClient } from '@clerk/backend';
-import { prisma } from '../../utils/prisma.js';
-import crypto from 'crypto';
-
-const clerkClient = createClerkClient({
-  secretKey: (process.env.CLERK_SECRET_KEY || '').trim(),
-  publishableKey: (process.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim(),
-});
+import { getSupabaseUser, upsertPublicUser } from '../../utils/auth-helper.js';
+import { supabaseAdmin } from '../../utils/supabase-server.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // Build a proper Request so Clerk can see the Authorization Bearer token
-    const authHeader = (req.headers?.authorization as string) || '';
-    const cookieHeader = (req.headers?.cookie as string) || '';
-    const fakeRequest = new Request(`http://localhost${req.url || '/'}`, {
-      method: req.method || 'GET',
-      headers: {
-        ...(authHeader ? { authorization: authHeader } : {}),
-        ...(cookieHeader ? { cookie: cookieHeader } : {}),
-      },
-    });
-    const requestState = await clerkClient.authenticateRequest(fakeRequest);
-    const { userId } = requestState.toAuth();
-
-    if (!userId) {
+    const authUser = await getSupabaseUser(req);
+    if (!authUser) {
       return res.status(401).json({ error: 'Unauthenticated' });
     }
 
-    // Find the user in Neon by clerkId
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId }
-    });
+    // Try to fetch the public.users row
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('id, name, email, role, avatar_url, classes_attended, hours_practiced, streak, last_active_date')
+      .eq('id', authUser.id)
+      .single();
 
-    if (!user) {
-      // If user exists in Clerk but not Neon yet, we might want to trigger a sync
-      // or just return 404 until the webhook arrives.
-      // For resilience, let's try to fetch user from Clerk and create if missing
-      const clerkUser = await clerkClient.users.getUser(userId);
-      const email = clerkUser.emailAddresses?.[0]?.emailAddress;
-      const name = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
-
-      if (email) {
-        const newUser = await prisma.user.upsert({
-          where: { clerkId: userId },
-          update: { email, name: name || undefined },
-          create: {
-            id: crypto.randomUUID(),
-            clerkId: userId,
-            email,
-            name: name || null,
-            updatedAt: new Date(),
-          }
-        });
-        return res.json({ 
-          id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, avatarUrl: newUser.avatarUrl,
-          classesAttended: newUser.classesAttended, hoursPracticed: newUser.hoursPracticed, streak: newUser.streak, lastActiveDate: newUser.lastActiveDate
-        });
-      }
-
-      return res.status(404).json({ error: 'User not found in database' });
+    if (error || !user) {
+      // Row may not exist yet (trigger race or first login) — upsert it
+      const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || null;
+      const newUser = await upsertPublicUser(authUser.id, authUser.email!, name);
+      return res.json({
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        avatar_url: newUser.avatar_url,
+        classesAttended: newUser.classes_attended,
+        hoursPracticed: newUser.hours_practiced,
+        streak: newUser.streak,
+        lastActiveDate: newUser.last_active_date,
+      });
     }
 
-    res.json({ 
-      id: user.id, name: user.name, email: user.email, role: user.role, avatarUrl: user.avatarUrl,
-      classesAttended: user.classesAttended, hoursPracticed: user.hoursPracticed, streak: user.streak, lastActiveDate: user.lastActiveDate
+    return res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar_url: user.avatar_url,
+      classesAttended: user.classes_attended,
+      hoursPracticed: user.hours_practiced,
+      streak: user.streak,
+      lastActiveDate: user.last_active_date,
     });
   } catch (e: any) {
-    console.error('Auth error:', e);
-    res.status(401).json({ error: 'Invalid session', details: e.message });
+    console.error('Auth/me error:', e);
+    return res.status(401).json({ error: 'Invalid session', details: e.message });
   }
 }

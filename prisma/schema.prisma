@@ -22,6 +22,7 @@ model Asana {
   difficulty   String   @default("Beginner")
   createdAt    DateTime @default(now())
   updatedAt    DateTime
+  SavedAsana   SavedAsana[]
 }
 
 model CommunityConversation {
@@ -119,6 +120,7 @@ model User {
   Subscription          Subscription?
   Entitlement           Entitlement[]
   UserActivity          UserActivity[]
+  SavedAsana            SavedAsana[]
 }
 
 model Entitlement {
@@ -160,6 +162,19 @@ model UserActivity {
 
   @@index([userId, completedAt])
 
+}
+
+model SavedAsana {
+  id        String   @id @default(cuid())
+  userId    String
+  asanaId   String
+  savedAt   DateTime @default(now())
+
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Asana     Asana    @relation(fields: [asanaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, asanaId])
+  @@index([userId])
 }
 
 enum Role {

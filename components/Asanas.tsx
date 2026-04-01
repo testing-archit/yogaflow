@@ -8,7 +8,8 @@ import { apiClient } from '../utils/apiClient';
 
 import { 
   Shield, 
-  Sparkles, 
+  Sparkles,
+  Heart,
   Target, 
   Zap, 
   Waves, 
@@ -34,9 +35,10 @@ export const Asanas: React.FC<AsanasProps> = ({ onNavPricing }) => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const [shouldNavigateToPricing, setShouldNavigateToPricing] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, getToken } = useAuth();
   const [asanas, setAsanas] = useState<Asana[]>(ASANAS);
   const [selectedAsana, setSelectedAsana] = useState<Asana | null>(null);
+  const [savedAsanaIds, setSavedAsanaIds] = useState<Set<string>>(new Set());
 
   // Navigate to pricing after successful login if triggered from "Join Live Workshop"
   useEffect(() => {
@@ -47,6 +49,28 @@ export const Asanas: React.FC<AsanasProps> = ({ onNavPricing }) => {
   }, [isAuthenticated, shouldNavigateToPricing, onNavPricing]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    const fetchSaved = async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch('/api/user/saved-asanas', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const ids = new Set<string>();
+          data.savedAsanas?.forEach((saved: any) => ids.add(saved.asanaId));
+          setSavedAsanaIds(ids);
+        }
+      } catch (err) {
+        console.error('Failed to load saved asanas', err);
+      }
+    };
+    fetchSaved();
+  }, [isAuthenticated, getToken]);
+
+  useEffect(() => {
     if (!selectedAsana) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setSelectedAsana(null);
@@ -54,6 +78,36 @@ export const Asanas: React.FC<AsanasProps> = ({ onNavPricing }) => {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedAsana]);
+
+  const toggleSaveAsana = async (asanaId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/user/saved-asanas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ asanaId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSavedAsanaIds(prev => {
+          const next = new Set(prev);
+          if (data.saved) next.add(asanaId);
+          else next.delete(asanaId);
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to toggle asana save', err);
+    }
+  };
 
   const getAsanaGallery = (asana: Asana) => {
     const urls = Array.isArray((asana as any).galleryUrls) ? (asana as any).galleryUrls : [];
@@ -234,9 +288,12 @@ export const Asanas: React.FC<AsanasProps> = ({ onNavPricing }) => {
                       <h3 className="text-3xl font-serif font-bold text-slate-900 leading-tight mb-1">{asana.sanskritName}</h3>
                       <p className="text-sm text-slate-500 font-light italic">{asana.englishName}</p>
                     </div>
-                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 group-hover:bg-teal-600 group-hover:text-white transition-all duration-700 shrink-0">
-                      <Target size={20} />
-                    </div>
+                    <button 
+                      onClick={(e) => toggleSaveAsana(asana.id, e)}
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shrink-0 ${savedAsanaIds.has(asana.id) ? 'bg-rose-50 text-rose-500' : 'bg-slate-50 text-slate-300 group-hover:bg-rose-50 group-hover:text-rose-400'}`}
+                    >
+                      <Heart size={20} className={savedAsanaIds.has(asana.id) ? 'fill-current' : ''} />
+                    </button>
                   </div>
 
                   <div className="space-y-6 mb-10 flex-grow">

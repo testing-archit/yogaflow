@@ -1,8 +1,6 @@
-// Utility to initialize Firestore collections with default data
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
-
+// Utility to initialize SQL collections with default data via apiClient
+import { apiClient } from './apiClient';
 import { ASANAS, RESEARCH_TOPICS, LIVE_CLASSES, RECORDED_CLASSES } from '../constants';
-import { Asana, ResearchTopic, YogaClass } from '../types';
 
 /**
  * Initialize asanas collection with default data
@@ -10,11 +8,11 @@ import { Asana, ResearchTopic, YogaClass } from '../types';
  */
 export const initializeAsanas = async (): Promise<{ added: number; skipped: number }> => {
   try {
-    console.log('🧘 Initializing asanas collection...');
+    console.log('🧘 Initializing asanas collection in SQL...');
     
-    // Get existing asanas
-    const existingSnapshot = await getDocs(collection(db, 'asanas'));
-    const existingIds = new Set(existingSnapshot.docs.map(doc => doc.id));
+    // Get existing asanas via SQL API
+    const existingAsanas = await apiClient.get('asana');
+    const existingIds = new Set(existingAsanas.map((a: any) => a.id));
     
     let added = 0;
     let skipped = 0;
@@ -28,10 +26,7 @@ export const initializeAsanas = async (): Promise<{ added: number; skipped: numb
       }
       
       try {
-        await setDoc(doc(db, 'asanas', asana.id), {
-          ...asana,
-          createdAt: new Date().toISOString(),
-        });
+        await apiClient.post('asana', asana);
         console.log(`✅ Added asana: ${asana.englishName} (${asana.id})`);
         added++;
       } catch (error: any) {
@@ -53,11 +48,11 @@ export const initializeAsanas = async (): Promise<{ added: number; skipped: numb
  */
 export const initializeResearch = async (): Promise<{ added: number; skipped: number }> => {
   try {
-    console.log('🔬 Initializing research collection...');
+    console.log('🔬 Initializing research collection in SQL...');
     
-    // Get existing research topics
-    const existingSnapshot = await getDocs(collection(db, 'research'));
-    const existingIds = new Set(existingSnapshot.docs.map(doc => doc.id));
+    // Get existing research topics via SQL API
+    const existingResearch = await apiClient.get('researchTopic');
+    const existingIds = new Set(existingResearch.map((r: any) => r.id));
     
     let added = 0;
     let skipped = 0;
@@ -71,10 +66,7 @@ export const initializeResearch = async (): Promise<{ added: number; skipped: nu
       }
       
       try {
-        await setDoc(doc(db, 'research', topic.id), {
-          ...topic,
-          createdAt: new Date().toISOString(),
-        });
+        await apiClient.post('researchTopic', topic);
         console.log(`✅ Added research topic: ${topic.benefit} (${topic.id})`);
         added++;
       } catch (error: any) {
@@ -96,19 +88,19 @@ export const initializeResearch = async (): Promise<{ added: number; skipped: nu
  */
 export const initializeClasses = async (): Promise<{ added: number; skipped: number }> => {
   try {
-    console.log('📅 Initializing classes collection...');
+    console.log('📅 Initializing classes collection in SQL...');
     
-    // Get existing classes
-    const existingSnapshot = await getDocs(collection(db, 'classes'));
-    const existingIds = new Set(existingSnapshot.docs.map(doc => doc.id));
+    // Get existing classes via SQL API
+    const existingClasses = await apiClient.get('yogaClass');
+    const existingIds = new Set(existingClasses.map((c: any) => c.id));
     
     let added = 0;
     let skipped = 0;
     
     // Combine live and recorded classes with category field
-    const allClasses: (YogaClass & { category: 'live' | 'recorded' })[] = [
-      ...LIVE_CLASSES.map(cls => ({ ...cls, category: 'live' as const })),
-      ...RECORDED_CLASSES.map(cls => ({ ...cls, category: 'recorded' as const })),
+    const allClasses = [
+      ...LIVE_CLASSES.map(cls => ({ ...cls, category: 'live' })),
+      ...RECORDED_CLASSES.map(cls => ({ ...cls, category: 'recorded' })),
     ];
     
     // Add each class if it doesn't exist
@@ -120,10 +112,7 @@ export const initializeClasses = async (): Promise<{ added: number; skipped: num
       }
       
       try {
-        await setDoc(doc(db, 'classes', cls.id), {
-          ...cls,
-          createdAt: new Date().toISOString(),
-        });
+        await apiClient.post('yogaClass', cls);
         console.log(`✅ Added class: ${cls.title} (${cls.id})`);
         added++;
       } catch (error: any) {
@@ -144,7 +133,7 @@ export const initializeClasses = async (): Promise<{ added: number; skipped: num
  */
 export const initializeAllCollections = async (): Promise<void> => {
   try {
-    console.log('🚀 Initializing all collections...');
+    console.log('🚀 Initializing all collections in SQL...');
     
     const asanasResult = await initializeAsanas();
     const researchResult = await initializeResearch();

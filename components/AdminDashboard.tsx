@@ -7,9 +7,7 @@ import {
   Sparkles, Target, ChevronRight, X, ShieldCheck, Microscope, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, serverTimestamp, addDoc, getDoc, onSnapshot, getDownloadURL, ref, storageRef, uploadBytes, deleteDoc, deleteObject, writeBatch, db, auth, storage } from '../utils/mockFirebase';
 import { apiClient } from '../utils/apiClient';
-
 import { DEFAULT_COMMUNITY_SETTINGS, getSettings, updateSettings } from '../utils/settings';
 import type { CommunityChatMessage, CommunityConversation, CommunitySettings } from '../utils/settings';
 import { LIVE_CLASSES, RECORDED_CLASSES, ASANAS, INSTRUCTORS, RESEARCH_TOPICS, PRICING_TIERS_INR, PRICING_TIERS_USD, PROBLEMS, SOLUTIONS, TIMELINE_STEPS } from '../constants';
@@ -40,7 +38,7 @@ interface UserData {
   role?: string;
   isAdmin?: boolean;
   roles?: string[];
-  source: 'firebase' | 'localStorage';
+  source: 'sql';
   lastLogin?: string;
   classesAttended?: number;
   hoursPracticed?: number;
@@ -69,14 +67,14 @@ type TabType = 'overview' | 'users' | 'journey' | 'asanas' | 'classes' | 'classe
 type ManagedYogaClass = YogaClass & { category: 'live' | 'recorded' };
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
-  const { user, logout, isAuthenticated, isAdmin, isAdminChecking } = useAuth();
+  const { user, logout, isAuthenticated, isAdmin, isAdminChecking, getToken } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [users, setUsers] = useState<UserData[]>([]);
   const [contactSubmissions, setContactSubmissions] = useState<ContactSubmission[]>([]);
   const [newsletterSubscribers, setNewsletterSubscribers] = useState<NewsletterSubscriber[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userFilter, setUserFilter] = useState<'all' | 'firebase' | 'localStorage'>('all');
+  const [userFilter, setUserFilter] = useState<'all'>('all');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   
@@ -219,294 +217,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     setIsLoading(true);
     try {
       console.log('📊 Loading admin data...');
-      // Load users from SQL database via API
+      // 1. Load users
       try {
-        console.log('👥 Loading users from SQL database...');
-        // Dynamically import apiClient to avoid circular dependency (now top level)
         const sqlUsers = await apiClient.get('user');
-        const users: UserData[] = sqlUsers.map((u: any) => ({
-          id: u.id,
-          name: u.name || 'Unknown',
-          email: u.email || '',
-          joinDate: u.createdAt || new Date().toISOString(),
-          plan: u.Subscription?.planId || null,
-          role: typeof u.role === 'string' ? u.role : undefined,
-          isAdmin: u.role === 'admin' || u.role === 'ADMIN',
-          roles: u.roles || undefined,
-          lastLogin: u.updatedAt || null,
-          classesAttended: u.classesAttended || 0,
-          hoursPracticed: u.hoursPracticed || 0,
-          streak: u.streak || 0,
-          source: 'sql' as const,
-        }));
-        setUsers(users);
-        console.log(`✅ Loaded ${users.length} users from SQL database`);
-      } catch (error: any) {
-        console.error('❌ Error loading users from SQL database:', error);
-        setUsers([]);
-      }
+        setUsers(sqlUsers.map((u: any) => ({
+          ...u,
+          source: 'sql',
+          joinDate: u.createdAt,
+          plan: u.Subscription?.planId || 'No Plan'
+        })));
+      } catch (err) { console.error('Error loading users:', err); }
 
-      // Load contact form submissions
+      // 2. Load contact submissions
       try {
-        console.log('📧 Loading contact form submissions...');
-        // Try with orderBy first, fallback to simple query if timestamp doesn't exist
-        let contactSnapshot;
-        try {
-          const contactQuery = query(
-            collection(db, 'contact_form'),
-            orderBy('createdAt', 'desc'),
-            limit(100)
-          );
-          contactSnapshot = await getDocs(contactQuery);
-        } catch (orderByError: any) {
-          // If orderBy fails (no index or field missing), just get all docs
-          console.warn('⚠️ orderBy failed, using simple query:', orderByError);
-          contactSnapshot = await getDocs(collection(db, 'contact_form'));
-        }
-        
-        const contacts: ContactSubmission[] = contactSnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            name: data.name || '',
-            email: data.email || '',
-            inquiryType: data.inquiryType || 'General Inquiry',
-            message: data.message || '',
-            timestamp: data.timestamp,
-            createdAt: data.createdAt || data.timestamp?.toDate?.()?.toISOString() || new Date().toISOString(),
-          };
-        });
-        // Sort by createdAt if orderBy didn't work
-        contacts.sort((a, b) => {
-          const dateA = new Date(a.createdAt || '').getTime();
-          const dateB = new Date(b.createdAt || '').getTime();
-          return dateB - dateA;
-        });
-        console.log(`✅ Loaded ${contacts.length} contact submissions`);
+        const contacts = await apiClient.get('contactRequest', undefined, { orderBy: 'createdAt', orderDir: 'desc' });
         setContactSubmissions(contacts);
-      } catch (error: any) {
-        console.error('❌ Error loading contact submissions:', error);
-        console.error('Error code:', error.code);
-        setContactSubmissions([]);
-      }
+      } catch (err) { console.error('Error loading contacts:', err); }
 
-      // Load newsletter subscribers
+      // 3. Load newsletter subscribers
       try {
-        console.log('📬 Loading newsletter subscribers...');
-        let newsletterSnapshot;
-        try {
-          const newsletterQuery = query(
-            collection(db, 'newsletter_subscribers'),
-            orderBy('subscribedAt', 'desc'),
-            limit(100)
-          );
-          newsletterSnapshot = await getDocs(newsletterQuery);
-        } catch (orderByError: any) {
-          console.warn('⚠️ orderBy failed, using simple query:', orderByError);
-          newsletterSnapshot = await getDocs(collection(db, 'newsletter_subscribers'));
-        }
-        
-        const subscribers: NewsletterSubscriber[] = newsletterSnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            email: data.email || '',
-            subscribedAt: data.subscribedAt,
-            source: data.source || 'unknown',
-          };
-        });
-        // Sort by subscribedAt if orderBy didn't work
-        subscribers.sort((a, b) => {
-          const dateA = a.subscribedAt?.toDate?.()?.getTime() || 0;
-          const dateB = b.subscribedAt?.toDate?.()?.getTime() || 0;
-          return dateB - dateA;
-        });
-        console.log(`✅ Loaded ${subscribers.length} newsletter subscribers`);
+        const subscribers = await apiClient.get('newsletter', undefined, { orderBy: 'createdAt', orderDir: 'desc' });
         setNewsletterSubscribers(subscribers);
-      } catch (error: any) {
-        console.error('❌ Error loading newsletter subscribers:', error);
-        console.error('Error code:', error.code);
-        setNewsletterSubscribers([]);
-      }
-      
-      // Load app settings
+      } catch (err) { console.error('Error loading subscribers:', err); }
+
+      // 4. Load app settings
       try {
-        console.log('⚙️ Loading app settings...');
         const settings = await getSettings();
         setClassesComingSoon(settings.classesComingSoon);
-        setPricingTiersINR((settings.pricingTiersINR && settings.pricingTiersINR.length > 0) ? settings.pricingTiersINR : PRICING_TIERS_INR);
-        setPricingTiersUSD((settings.pricingTiersUSD && settings.pricingTiersUSD.length > 0) ? settings.pricingTiersUSD : PRICING_TIERS_USD);
-        const nextCommunity: CommunitySettings = {
-          ...DEFAULT_COMMUNITY_SETTINGS,
-          ...(settings.community || {}),
-          conversations:
-            settings.community?.conversations && Array.isArray(settings.community.conversations) && settings.community.conversations.length > 0
-              ? (settings.community.conversations as CommunityConversation[])
-              : DEFAULT_COMMUNITY_SETTINGS.conversations,
-          histories:
-            settings.community?.histories && typeof settings.community.histories === 'object'
-              ? (settings.community.histories as Record<string, CommunityChatMessage[]>)
-              : DEFAULT_COMMUNITY_SETTINGS.histories,
-        };
-        setCommunitySettings(nextCommunity);
-        setActiveCommunityConversationId((prev) => {
-          const exists = nextCommunity.conversations.some((c) => c.id === prev);
-          return exists ? prev : (nextCommunity.conversations[0]?.id || '');
-        });
-        const fallbackJourney = getDefaultJourneySettings();
-        const loadedJourney = (settings as any).journey as JourneySettings | undefined;
-        const nextJourney: JourneySettings = {
-          ...fallbackJourney,
-          ...(loadedJourney || {}),
-          problems:
-            loadedJourney?.problems && Array.isArray(loadedJourney.problems) && loadedJourney.problems.length > 0
-              ? (loadedJourney.problems as JourneyListItemSettings[])
-              : fallbackJourney.problems,
-          solutions:
-            loadedJourney?.solutions && Array.isArray(loadedJourney.solutions) && loadedJourney.solutions.length > 0
-              ? (loadedJourney.solutions as JourneyListItemSettings[])
-              : fallbackJourney.solutions,
-          steps:
-            loadedJourney?.steps && Array.isArray(loadedJourney.steps) && loadedJourney.steps.length > 0
-              ? (loadedJourney.steps as JourneyTimelineStepSettings[])
-              : fallbackJourney.steps,
-        };
-        setJourneySettings(nextJourney);
-        console.log('✅ Settings loaded:', settings);
-      } catch (error: any) {
-        console.error('❌ Error loading settings:', error);
-        setJourneySettings(getDefaultJourneySettings());
-      }
+        setPricingTiersINR(settings.pricingTiersINR?.length ? settings.pricingTiersINR : PRICING_TIERS_INR);
+        setPricingTiersUSD(settings.pricingTiersUSD?.length ? settings.pricingTiersUSD : PRICING_TIERS_USD);
+        setCommunitySettings({ ...DEFAULT_COMMUNITY_SETTINGS, ...(settings.community || {}) });
+        setJourneySettings({ ...getDefaultJourneySettings(), ...(settings.journey || {}) });
+      } catch (err) { console.error('Error loading settings:', err); }
 
-      // Load class videos from Firestore
+      // 5. Load asanas
       try {
-        console.log('🎥 Loading class videos...');
-        const videosSnapshot = await getDocs(collection(db, 'class_videos'));
+        let loadedAsanas = await apiClient.get('asana');
+        if (!loadedAsanas.length) {
+          for (const a of ASANAS) await apiClient.post('asana', a);
+          loadedAsanas = ASANAS;
+        }
+        setAsanas(loadedAsanas);
+      } catch (err) { console.error('Error loading asanas:', err); }
+
+      // 6. Load instructors
+      try {
+        let loadedInstructors = await apiClient.get('instructor');
+        if (!loadedInstructors.length) {
+          for (const i of INSTRUCTORS) await apiClient.post('instructor', i);
+          loadedInstructors = INSTRUCTORS;
+        }
+        setInstructors(loadedInstructors);
+      } catch (err) { console.error('Error loading instructors:', err); }
+
+      // 7. Load research topics
+      try {
+        let loadedResearch = await apiClient.get('researchTopic');
+        if (!loadedResearch.length) {
+          for (const r of RESEARCH_TOPICS) await apiClient.post('researchTopic', r);
+          loadedResearch = RESEARCH_TOPICS;
+        }
+        setResearchTopics(loadedResearch);
+      } catch (err) { console.error('Error loading research:', err); }
+
+      // 8. Load yoga classes
+      try {
+        let loadedClasses = await apiClient.get('yogaClass');
+        if (!loadedClasses.length) {
+          const defaults = [
+            ...LIVE_CLASSES.map(c => ({ ...c, category: 'live' })),
+            ...RECORDED_CLASSES.map(c => ({ ...c, category: 'recorded' }))
+          ];
+          for (const c of defaults) await apiClient.post('yogaClass', c);
+          loadedClasses = defaults;
+        }
+        setClasses(loadedClasses);
+
+        // 9. Process class videos (now part of YogaClass model)
         const videosMap: Record<string, string> = {};
-        videosSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          videosMap[data.classId] = data.videoUrl;
-        });
+        loadedClasses.forEach((c: any) => { if (c.videoUrl) videosMap[c.id] = c.videoUrl; });
         setClassesWithVideos(videosMap);
-        console.log(`✅ Loaded ${Object.keys(videosMap).length} class videos`);
-      } catch (error: any) {
-        console.error('❌ Error loading class videos:', error);
-      }
+      } catch (err) { console.error('Error loading classes:', err); }
 
-      // Load asanas from Firestore
-      try {
-        console.log('🧘 Loading asanas...');
-        const asanasSnapshot = await getDocs(collection(db, 'asanas'));
-        if (asanasSnapshot.empty) {
-          // Initialize with default asanas if empty
-          const defaultAsanas = ASANAS;
-          for (const asana of defaultAsanas) {
-            await setDoc(doc(db, 'asanas', asana.id), asana);
-          }
-          setAsanas(defaultAsanas);
-          console.log('✅ Initialized asanas with defaults');
-        } else {
-          const loadedAsanas: Asana[] = asanasSnapshot.docs
-            .map(doc => doc.data() as Asana)
-            .filter(asana => !asana.deleted); // Filter out deleted asanas
-          setAsanas(loadedAsanas);
-          console.log(`✅ Loaded ${loadedAsanas.length} asanas`);
-        }
-      } catch (error: any) {
-        console.error('❌ Error loading asanas:', error);
-        // Fallback to constants
-        setAsanas(ASANAS);
-      }
-
-      // Load instructors from Firestore
-      try {
-        console.log('👨‍🏫 Loading instructors...');
-        const instructorsSnapshot = await getDocs(collection(db, 'instructors'));
-        if (instructorsSnapshot.empty) {
-          // Initialize with default instructors if empty
-          const defaultInstructors = INSTRUCTORS;
-          for (const instructor of defaultInstructors) {
-            await setDoc(doc(db, 'instructors', instructor.id), instructor);
-          }
-          setInstructors(defaultInstructors);
-          console.log('✅ Initialized instructors with defaults');
-        } else {
-          const loadedInstructors: Instructor[] = instructorsSnapshot.docs
-            .map(doc => doc.data() as Instructor)
-            .filter(instructor => !instructor.deleted); // Filter out deleted instructors
-          setInstructors(loadedInstructors);
-          console.log(`✅ Loaded ${loadedInstructors.length} instructors`);
-        }
-      } catch (error: any) {
-        console.error('❌ Error loading instructors:', error);
-        // Fallback to constants
-        setInstructors(INSTRUCTORS);
-      }
-
-      // Load research topics from Firestore
-      try {
-        console.log('🔬 Loading research topics...');
-        const researchSnapshot = await getDocs(collection(db, 'research'));
-        if (researchSnapshot.empty) {
-          // Initialize with default research topics if empty
-          const defaultResearch = RESEARCH_TOPICS;
-          for (const topic of defaultResearch) {
-            await setDoc(doc(db, 'research', topic.id), topic);
-          }
-          setResearchTopics(defaultResearch);
-          console.log('✅ Initialized research topics with defaults');
-        } else {
-          const loadedResearch: ResearchTopic[] = researchSnapshot.docs
-            .map(doc => doc.data() as ResearchTopic);
-          setResearchTopics(loadedResearch);
-          console.log(`✅ Loaded ${loadedResearch.length} research topics`);
-        }
-      } catch (error: any) {
-        console.error('❌ Error loading research topics:', error);
-        // Fallback to constants
-        setResearchTopics(RESEARCH_TOPICS);
-      }
-
-      // Load classes from Firestore
-      try {
-        console.log('📅 Loading classes...');
-        const classesSnapshot = await getDocs(collection(db, 'classes'));
-        if (classesSnapshot.empty) {
-          // Initialize with default classes if empty
-          const defaultLiveClasses = LIVE_CLASSES.map(cls => ({ ...cls, category: 'live' as const }));
-          const defaultRecordedClasses = RECORDED_CLASSES.map(cls => ({ ...cls, category: 'recorded' as const }));
-          const allDefaultClasses = [...defaultLiveClasses, ...defaultRecordedClasses];
-          for (const cls of allDefaultClasses) {
-            await setDoc(doc(db, 'classes', cls.id), cls);
-          }
-          setClasses(allDefaultClasses);
-          console.log('✅ Initialized classes with defaults');
-        } else {
-          const loadedClasses: (YogaClass & { category: 'live' | 'recorded' })[] = classesSnapshot.docs
-            .map(doc => {
-              const data = doc.data();
-              return {
-                ...data,
-                category: data.category || (data.time ? 'live' : 'recorded'),
-              } as YogaClass & { category: 'live' | 'recorded' };
-            })
-            .filter(cls => !cls.deleted);
-          setClasses(loadedClasses);
-          console.log(`✅ Loaded ${loadedClasses.length} classes`);
-        }
-      } catch (error: any) {
-        console.error('❌ Error loading classes:', error);
-        // Fallback to constants
-        const fallbackLive = LIVE_CLASSES.map(cls => ({ ...cls, category: 'live' as const }));
-        const fallbackRecorded = RECORDED_CLASSES.map(cls => ({ ...cls, category: 'recorded' as const }));
-        setClasses([...fallbackLive, ...fallbackRecorded]);
-      }
-      
-      console.log('✅ Admin data loading complete');
     } catch (error: any) {
-      console.error('❌ Error loading admin data:', error);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
+      console.error('❌ Massive Error loading admin data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -516,7 +310,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     const matchesSearch = 
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = userFilter === 'all' || u.source === userFilter;
+    const matchesFilter = true;
     return matchesSearch && matchesFilter;
   });
 
@@ -989,17 +783,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   };
 
   const openCreateCommunityGroup = () => {
-    if (!auth.currentUser) {
-      alert('You must be logged in as an admin to manage community groups.');
-      setIsLoginModalOpen(true);
-      return;
-    }
     resetCommunityGroupModal();
     setIsCommunityGroupModalOpen(true);
   };
 
   const openEditCommunityGroup = (conversationId: string) => {
-    if (!auth.currentUser) {
+    if (!isAuthenticated) {
       alert('You must be logged in as an admin to manage community groups.');
       setIsLoginModalOpen(true);
       return;
@@ -1014,7 +803,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   };
 
   const saveCommunityGroupFromModal = async () => {
-    if (!auth.currentUser) {
+    if (!isAuthenticated) {
       alert('You must be logged in as an admin to manage community groups.');
       setIsLoginModalOpen(true);
       return;
@@ -1076,22 +865,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
     setCommunitySettings(nextCommunitySettings);
 
-    void setDoc(
-      doc(db, 'community_conversations', nextId),
-      {
-        author: name,
-        avatar,
-        isGroup: true,
-        isSupportGroup: false,
-        members: communityGroupSelectedUserIds.length,
-        memberIds: [...communityGroupSelectedUserIds],
-        lastText: '',
-        time: 'Just now',
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    ).catch(() => {});
 
     try {
       await updateSettings({ community: sanitizeForFirestore(nextCommunitySettings) });
@@ -1111,7 +884,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const handleSaveCommunity = async () => {
     try {
-      if (!auth.currentUser) {
+      if (!isAuthenticated) {
         alert('You must be logged in as an admin to manage community groups.');
         setIsLoginModalOpen(true);
         return;
@@ -1180,24 +953,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       };
 
       await updateSettings({ community: sanitizeForFirestore(cleaned) });
-      await Promise.all(
-        cleaned.conversations.map((c) =>
-          setDoc(
-            doc(db, 'community_conversations', c.id),
-            {
-              author: c.author,
-              avatar: c.avatar,
-              isGroup: !!c.isGroup,
-              isSupportGroup: !!c.isSupportGroup,
-              members: typeof c.members === 'number' ? c.members : 0,
-              memberIds: Array.isArray((c as any).memberIds) ? (c as any).memberIds : [],
-              updatedAt: serverTimestamp(),
-              createdAt: serverTimestamp(),
-            },
-            { merge: true }
-          )
-        )
-      );
       setCommunitySettings(cleaned);
       setActiveCommunityConversationId((prev) => {
         const exists = cleaned.conversations.some((c) => c.id === prev);
@@ -1252,149 +1007,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const handleSaveClass = async (cls: ManagedYogaClass) => {
     try {
-      let finalId = cls.id;
-      if (!finalId || finalId === '') {
-        finalId = cls.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (cls.id && cls.id.trim() !== '') {
+        await apiClient.put('yogaClass', cls.id, cls);
+      } else {
+        await apiClient.post('yogaClass', cls);
       }
-
-      const cleanFocus = (cls.focus || []).filter(f => f.trim() !== '');
-      if (cleanFocus.length === 0) {
-        alert('Please add at least one focus item.');
-        return;
-      }
-
-      if (cls.category === 'live' && (!cls.time || cls.time.trim() === '')) {
-        alert('Please add a time for live classes.');
-        return;
-      }
-
-      const finalClass: ManagedYogaClass = {
-        ...cls,
-        id: finalId,
-        focus: cleanFocus,
-        time: cls.category === 'live' ? (cls.time || '').trim() : undefined,
-      };
-
-      const classRef = doc(db, 'classes', finalId);
-      await saveWithRetry(
-        () => setDoc(classRef, sanitizeForFirestore(finalClass), { merge: true }),
-        `Save class ${finalId}`
-      );
-
-      setClasses(prev => {
-        const existing = prev.findIndex(c => c.id === finalId);
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = finalClass;
-          return updated;
-        }
-        return [...prev, finalClass];
-      });
-
-      setEditingClass(null);
+      loadData();
       setIsClassFormOpen(false);
+      setEditingClass(null);
       alert('Class saved successfully!');
     } catch (error: any) {
       console.error('❌ Error saving class:', error);
-      let errorMessage = 'Failed to save class. ';
-      if (error.code === 'permission-denied') {
-        errorMessage += 'Permission denied. Please check database permissions.';
-      } else if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please try again.';
-      }
-      alert(errorMessage);
+      alert('Failed to save class: ' + (error.message || 'Check connection'));
     }
   };
 
   const handleDeleteClass = async (classId: string) => {
     if (!confirm('Are you sure you want to delete this class?')) return;
     try {
-      await saveWithRetry(
-        () => setDoc(doc(db, 'classes', classId), { deleted: true }, { merge: true }),
-        `Delete class ${classId}`
-      );
-      setClasses(prev => prev.filter(c => c.id !== classId));
-      setClassesWithVideos(prev => {
-        const next = { ...prev };
-        delete next[classId];
-        return next;
-      });
-      console.log('✅ Class deleted:', classId);
-    } catch (error) {
+      await apiClient.delete('yogaClass', classId);
+      loadData();
+    } catch (error: any) {
       console.error('❌ Error deleting class:', error);
-      alert('Failed to delete class. Please try again.');
+      alert('Failed to delete class.');
     }
   };
 
   // Handle asana save
   const handleSaveAsana = async (asana: Asana) => {
     try {
-      console.log('💾 Attempting to save asana:', {
-        id: asana.id,
-        sanskritName: asana.sanskritName,
-        englishName: asana.englishName,
-        hasBenefits: asana.benefits?.length > 0,
-        hasHowTo: asana.howTo?.length > 0,
-      });
-      
-      // Test connection first
-      try {
-        const testRef = doc(db, '_connection_test', 'test');
-        await getDoc(testRef);
-        console.log('✅ Firestore connection test passed');
-      } catch (testError: any) {
-        console.warn('⚠️ Connection test failed, but continuing:', testError.message);
+      if (asana.id && asana.id.trim() !== '') {
+        await apiClient.put('asana', asana.id, asana);
+      } else {
+        await apiClient.post('asana', asana);
       }
-      
-      const asanaRef = doc(db, 'asanas', asana.id);
-      console.log('📝 Document reference created:', asanaRef.path);
-      
-      // Save with retry logic
-      await saveWithRetry(
-        () => setDoc(asanaRef, asana),
-        `Save asana ${asana.id}`
-      );
-      
-      console.log('✅ Asana saved successfully to Firestore:', asana.id);
-      
-      setAsanas(prev => {
-        const existing = prev.findIndex(a => a.id === asana.id);
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = asana;
-          return updated;
-        }
-        return [...prev, asana];
-      });
-      setEditingAsana(null);
+      loadData();
       setIsAsanaFormOpen(false);
-      
       alert('Asana saved successfully!');
     } catch (error: any) {
       console.error('❌ Error saving asana:', error);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
-      console.error('Error details:', error);
-      
-      let errorMessage = 'Failed to save asana. ';
-      if (error.message?.includes('timed out')) {
-        errorMessage += 'Request timed out. This might be a network issue or database configuration problem. ';
-        errorMessage += 'Please check: 1) Your internet connection, 2) database server is reachable, 3) Browser console for more details.';
-      } else if (error.code === 'permission-denied') {
-        errorMessage += 'Permission denied. Please check database permissions.';
-      } else if (error.code === 'unavailable') {
-        errorMessage += 'Service unavailable. Please check your internet connection and server status.';
-      } else if (error.code === 'failed-precondition') {
-        errorMessage += 'Database error. Please check database configuration.';
-      } else if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please try again.';
-      }
-      
-      alert(errorMessage);
+      alert('Failed to save asana: ' + (error.message || 'Check connection'));
     }
   };
 
@@ -1402,93 +1054,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const handleDeleteAsana = async (asanaId: string) => {
     if (!confirm('Are you sure you want to delete this asana?')) return;
     try {
-      // Mark as deleted instead of actually deleting
-      await setDoc(doc(db, 'asanas', asanaId), { deleted: true }, { merge: true });
-      setAsanas(prev => prev.filter(a => a.id !== asanaId));
-      console.log('✅ Asana deleted:', asanaId);
+      await apiClient.delete('asana', asanaId);
+      loadData();
     } catch (error) {
       console.error('❌ Error deleting asana:', error);
-      alert('Failed to delete asana. Please try again.');
+      alert('Failed to delete asana.');
     }
   };
 
   // Handle instructor save
   const handleSaveInstructor = async (instructor: Instructor) => {
     try {
-      // Generate ID if new instructor
-      let finalId = instructor.id;
-      if (!finalId || finalId === '') {
-        finalId = instructor.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (instructor.id && instructor.id.trim() !== '') {
+        await apiClient.put('instructor', instructor.id, instructor);
+      } else {
+        await apiClient.post('instructor', instructor);
       }
-      
-      const finalInstructor: Instructor = {
-        ...instructor,
-        id: finalId,
-      };
-      
-      console.log('💾 Attempting to save instructor:', {
-        id: finalId,
-        name: finalInstructor.name,
-        role: finalInstructor.role,
-        hasSpecialties: finalInstructor.specialties?.length > 0,
-      });
-      
-      // Test connection first
-      try {
-        const testRef = doc(db, '_connection_test', 'test');
-        await getDoc(testRef);
-        console.log('✅ Firestore connection test passed');
-      } catch (testError: any) {
-        console.warn('⚠️ Connection test failed, but continuing:', testError.message);
-      }
-      
-      const instructorRef = doc(db, 'instructors', finalId);
-      console.log('📝 Document reference created:', instructorRef.path);
-      
-      // Save with retry logic
-      await saveWithRetry(
-        () => setDoc(instructorRef, sanitizeForFirestore(finalInstructor)),
-        `Save instructor ${finalId}`
-      );
-      
-      console.log('✅ Instructor saved successfully to Firestore:', finalId);
-      
-      setInstructors(prev => {
-        const existing = prev.findIndex(i => i.id === finalId);
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = finalInstructor;
-          return updated;
-        }
-        return [...prev, finalInstructor];
-      });
-      setEditingInstructor(null);
+      loadData();
       setIsInstructorFormOpen(false);
-      
       alert('Instructor saved successfully!');
     } catch (error: any) {
       console.error('❌ Error saving instructor:', error);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
-      console.error('Error details:', error);
-      
-      let errorMessage = 'Failed to save instructor. ';
-      if (error.message?.includes('timed out')) {
-        errorMessage += 'Request timed out. This might be a network issue or database configuration problem. ';
-        errorMessage += 'Please check: 1) Your internet connection, 2) database server is reachable, 3) Browser console for more details.';
-      } else if (error.code === 'permission-denied') {
-        errorMessage += 'Permission denied. Please check database permissions.';
-      } else if (error.code === 'unavailable') {
-        errorMessage += 'Service unavailable. Please check your internet connection and server status.';
-      } else if (error.code === 'failed-precondition') {
-        errorMessage += 'Database error. Please check database configuration.';
-      } else if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please try again.';
-      }
-      
-      alert(errorMessage);
+      alert('Failed to save instructor.');
     }
   };
 
@@ -1496,40 +1083,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const handleDeleteInstructor = async (instructorId: string) => {
     if (!confirm('Are you sure you want to delete this instructor?')) return;
     try {
-      // Mark as deleted instead of actually deleting
-      await setDoc(doc(db, 'instructors', instructorId), { deleted: true }, { merge: true });
-      setInstructors(prev => prev.filter(i => i.id !== instructorId));
-      console.log('✅ Instructor deleted:', instructorId);
+      await apiClient.delete('instructor', instructorId);
+      loadData();
     } catch (error) {
       console.error('❌ Error deleting instructor:', error);
-      alert('Failed to delete instructor. Please try again.');
+      alert('Failed to delete instructor.');
     }
   };
 
   // Handle research topic save
   const handleSaveResearch = async (topic: ResearchTopic) => {
     try {
-      console.log('💾 Attempting to save research topic:', topic.id || 'new topic');
-      await saveWithRetry(
-        () => setDoc(doc(db, 'research', topic.id), topic),
-        `Save research topic ${topic.id}`
-      );
-      setResearchTopics(prev => {
-        const existing = prev.findIndex(t => t.id === topic.id);
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = topic;
-          return updated;
-        }
-        return [...prev, topic];
-      });
-      setEditingResearch(null);
+      if (topic.id && topic.id.trim() !== '') {
+        await apiClient.put('researchTopic', topic.id, topic);
+      } else {
+        await apiClient.post('researchTopic', topic);
+      }
+      loadData();
       setIsResearchFormOpen(false);
-      console.log('✅ Research topic saved successfully to Firestore:', topic.id);
       alert('Research topic saved successfully!');
     } catch (error: any) {
       console.error('❌ Error saving research topic:', error);
-      alert(`Failed to save research topic: ${error.message}. Please try again.`);
+      alert('Failed to save research topic.');
     }
   };
 
@@ -1537,18 +1112,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const handleDeleteResearch = async (topicId: string) => {
     if (!confirm('Are you sure you want to delete this research topic?')) return;
     try {
-      console.log('🗑️ Attempting to delete research topic:', topicId);
-      // Mark as deleted instead of actually deleting
-      await saveWithRetry(
-        () => setDoc(doc(db, 'research', topicId), { deleted: true }, { merge: true }),
-        `Delete research topic ${topicId}`
-      );
-      setResearchTopics(prev => prev.filter(t => t.id !== topicId));
-      console.log('✅ Research topic deleted successfully from Firestore:', topicId);
+      await apiClient.delete('researchTopic', topicId);
+      loadData();
       alert('Research topic deleted successfully!');
     } catch (error: any) {
       console.error('❌ Error deleting research topic:', error);
-      alert(`Failed to delete research topic: ${error.message}. Please try again.`);
+      alert('Failed to delete research topic.');
     }
   };
 
@@ -1561,26 +1130,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
     setUploadingVideo(classId);
     try {
-      // Check if video already exists for this class
-      const allVideos = await getDocs(collection(db, 'class_videos'));
-      const existingVideo = allVideos.docs.find(doc => doc.data().classId === classId);
-
-      if (existingVideo) {
-        // Update existing video
-        await setDoc(doc(db, 'class_videos', existingVideo.id), {
-          classId,
-          videoUrl: videoUrl.trim(),
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } else {
-        // Create new video
-        await addDoc(collection(db, 'class_videos'), {
-          classId,
-          videoUrl: videoUrl.trim(),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
+      // Update the YogaClass directly in SQL
+      await apiClient.put('yogaClass', classId, {
+        videoUrl: videoUrl.trim(),
+      });
 
       // Update local state
       setClassesWithVideos(prev => ({
@@ -1588,10 +1141,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         [classId]: videoUrl.trim()
       }));
 
-      console.log('✅ Video uploaded for class:', classId);
-    } catch (error) {
-      console.error('❌ Error uploading video:', error);
-      alert('Failed to upload video. Please try again.');
+      console.log('✅ Video URL updated for class:', classId);
+      alert('Video URL updated successfully!');
+    } catch (error: any) {
+      console.error('❌ Error updating video URL:', error);
+      alert(`Failed to update video: ${error.message || 'Please try again.'}`);
     } finally {
       setUploadingVideo(null);
     }
@@ -1746,12 +1300,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                           try {
                             const result = await initializeAsanas();
                             alert(`Asanas initialized!\n${result.added} added, ${result.skipped} skipped.\n\nPlease refresh the page to see the updated data.`);
-                            // Reload asanas
-                            const asanasSnapshot = await getDocs(collection(db, 'asanas'));
-                            const loadedAsanas: Asana[] = asanasSnapshot.docs
-                              .map(doc => doc.data() as Asana)
-                              .filter(asana => !asana.deleted);
-                            setAsanas(loadedAsanas);
+                            // Reload data from SQL
+                            loadData();
                           } catch (error: any) {
                             console.error('Error initializing asanas:', error);
                             alert(`Failed to initialize asanas: ${error.message || 'Unknown error'}`);
@@ -1782,12 +1332,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                           try {
                             await initializeAllCollections();
                             alert('All collections initialized successfully!\n\nPlease refresh the page to see the updated data.');
-                            // Reload asanas
-                            const asanasSnapshot = await getDocs(collection(db, 'asanas'));
-                            const loadedAsanas: Asana[] = asanasSnapshot.docs
-                              .map(doc => doc.data() as Asana)
-                              .filter(asana => !asana.deleted);
-                            setAsanas(loadedAsanas);
+                            // Reload all data from SQL
+                            loadData();
                           } catch (error: any) {
                             console.error('Error initializing collections:', error);
                             alert(`Failed to initialize collections: ${error.message || 'Unknown error'}`);
@@ -1845,8 +1391,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         className="px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white"
                       >
                         <option value="all">All Users</option>
-                        <option value="firebase">Firebase</option>
-                        <option value="localStorage">Local Storage</option>
                       </select>
                     </div>
                   </div>
@@ -1897,12 +1441,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                   )}
                                 </td>
                                 <td className="px-6 py-4">
-                                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    user.source === 'firebase'
-                                      ? 'bg-blue-100 text-blue-700'
-                                      : 'bg-purple-100 text-purple-700'
-                                  }`}>
-                                    {user.source}
+                                  <span className={`px-3 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-700`}>
+                                    SQL
                                   </span>
                                 </td>
                                 <td className="px-6 py-4">
@@ -1915,26 +1455,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                         setEditingUserStats(user);
                                         setIsUserStatsModalOpen(true);
                                       }}
-                                      disabled={user.source !== 'firebase'}
-                                      title={user.source !== 'firebase' ? 'Only Firebase users can be updated' : 'Edit practice stats'}
-                                      className={`p-2 transition-colors ${
-                                        user.source !== 'firebase'
-                                          ? 'text-slate-200 cursor-not-allowed'
-                                          : 'text-slate-400 hover:text-blue-600'
-                                      }`}
+                                      title="Edit practice stats"
+                                      className={`p-2 transition-colors text-slate-400 hover:text-blue-600`}
                                     >
                                       <Edit size={16} />
                                     </button>
                                     <button
                                       onClick={() => setUserAdmin(user, !isUserAdmin(user))}
-                                      disabled={user.source !== 'firebase'}
-                                      title={user.source !== 'firebase' ? 'Only Firebase users can be updated' : isUserAdmin(user) ? 'Remove admin' : 'Make admin'}
+                                      title={isUserAdmin(user) ? 'Remove admin' : 'Make admin'}
                                       className={`p-2 transition-colors ${
-                                        user.source !== 'firebase'
-                                          ? 'text-slate-200 cursor-not-allowed'
-                                          : isUserAdmin(user)
-                                            ? 'text-teal-600 hover:text-teal-700'
-                                            : 'text-slate-400 hover:text-teal-600'
+                                        isUserAdmin(user)
+                                          ? 'text-teal-600 hover:text-teal-700'
+                                          : 'text-slate-400 hover:text-teal-600'
                                       }`}
                                     >
                                       <Shield size={16} />
@@ -3988,26 +3520,7 @@ const InstructorFormModal: React.FC<InstructorFormModalProps> = ({ instructor, o
       return;
     }
 
-    const base = (formData.id || formData.name || 'instructor')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'instructor';
-
-    const safeName = (file.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `instructors/${base}/${Date.now()}-${safeName}`;
-
-    try {
-      setIsUploadingInstructorImage(true);
-      const fileRef = storageRef(storage, path);
-      await uploadBytes(fileRef, file, { contentType: file.type });
-      const url = await getDownloadURL(fileRef);
-      setFormData((prev) => ({ ...prev, imageUrl: url }));
-    } catch (error: any) {
-      console.error('❌ Instructor image upload failed:', error);
-      alert(`Failed to upload image: ${error?.message || 'Please try again.'}`);
-    } finally {
-      setIsUploadingInstructorImage(false);
-    }
+    alert('Direct image upload is currently disabled after migrating from Firebase. Please provide an image URL instead.');
   };
 
   const handleSubmit = (e: React.FormEvent) => {

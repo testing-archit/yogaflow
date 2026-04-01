@@ -1,14 +1,13 @@
-// Get Clerk JWT token for authenticated requests
+import { supabase } from './supabase';
+
+// Gets the current Supabase session token — replaces the old Clerk window token approach
 const getToken = async (): Promise<string> => {
   try {
-    // @clerk/react exposes the Clerk instance on window after initialization
-    const clerk = (window as any).Clerk;
-    if (clerk?.session) {
-      const token = await clerk.session.getToken();
-      if (token) return token;
-    }
-  } catch (e) {}
-  return '';
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? '';
+  } catch {
+    return '';
+  }
 };
 
 const getHeaders = async (isPublic = false): Promise<Record<string, string>> => {
@@ -21,10 +20,10 @@ const getHeaders = async (isPublic = false): Promise<Record<string, string>> => 
 };
 
 // Public tables that don't require auth for reads
-const PUBLIC_TABLES = ['asana', 'instructor', 'yogaClass', 'researchTopic', 'appSetting', 'classVideo'];
+const PUBLIC_TABLES = ['asanas', 'instructors', 'yoga_classes', 'research_topics', 'app_settings'];
 
 export const apiClient = {
-  get: async (table: string, id?: string, options?: { filters?: any, orderBy?: string, orderDir?: 'asc' | 'desc' }) => {
+  get: async (table: string, id?: string, options?: { filters?: any; orderBy?: string; orderDir?: 'asc' | 'desc' }) => {
     let url = `/api/crud?table=${table}`;
     if (id) url += `&id=${id}`;
     if (options?.filters) url += `&filters=${encodeURIComponent(JSON.stringify(options.filters))}`;

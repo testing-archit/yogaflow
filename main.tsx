@@ -1,16 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { ClerkProvider } from '@clerk/react';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");
-}
-
-const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-if (!clerkPubKey) {
-  throw new Error("Missing Publishable Key");
 }
 
 class AppErrorBoundary extends React.Component<
@@ -70,14 +66,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <ClerkProvider 
-        publishableKey={clerkPubKey}
-        signInFallbackRedirectUrl="/"
-        signUpFallbackRedirectUrl="/"
-        afterSignOutUrl="/"
-      >
-        <App />
-      </ClerkProvider>
+      <App />
+      <Analytics />
+      <SpeedInsights />
     </AppErrorBoundary>
   </React.StrictMode>
 );

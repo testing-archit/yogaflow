@@ -9,7 +9,6 @@ import { Reveal } from './Reveal';
 import { initiateRazorpayPayment, initiateRazorpaySubscription } from '../utils/razorpay';
 import { useAuth } from '../contexts/AuthContext';
 import { LoginModal, SignupModal } from './LoginModal';
-import { useAuth as useClerkAuth } from '@clerk/react';
 import { apiClient } from '../utils/apiClient';
 import { getSettings } from '../utils/settings';
 
@@ -19,8 +18,7 @@ interface PricingProps {
 }
 
 export const Pricing: React.FC<PricingProps> = ({ onShowLogin }) => {
-  const { isAuthenticated, user } = useAuth();
-  const { getToken } = useClerkAuth();
+  const { isAuthenticated, user, getToken } = useAuth();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const [pendingPurchase, setPendingPurchase] = useState<PricingTier | null>(null);
