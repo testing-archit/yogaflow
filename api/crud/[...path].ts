@@ -19,7 +19,11 @@ const ALLOWED_TABLES = [
 const parseBody = (body: any) => (typeof body === 'string' ? JSON.parse(body) : body);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { table, id } = req.query as { table: string; id?: string };
+  const { path } = req.query as { path?: string | string[] };
+  const pathArray = Array.isArray(path) ? path : (path ? [path] : []);
+
+  const table = pathArray[0];
+  const id = pathArray[1] || (req.query.id as string | undefined);
 
   if (!table || !ALLOWED_TABLES.includes(table)) {
     return res.status(400).json({ error: 'Invalid or disallowed table name' });
